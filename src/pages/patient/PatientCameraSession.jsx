@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { exercises } from '../../data.js'
+import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
+import { supabase } from '../../lib/supabase.js'
 
 // Simulated skeleton keypoints
 const JOINTS = [
@@ -36,7 +37,29 @@ const FEEDBACK_MSGS = [
 export default function PatientCameraSession() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const exercise = exercises.find(e => e.id === Number(id))
+  const [exerciseName, setExerciseName] = useState('Exercise')
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadExercise() {
+      const { data } = await supabase
+        .from('exercises')
+        .select('name')
+        .eq('id', Number(id))
+        .maybeSingle()
+
+      if (isMounted && data?.name) {
+        setExerciseName(data.name)
+      }
+    }
+
+    loadExercise()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id])
 
   const [reps, setReps] = useState(0)
   const [score, setScore] = useState(72)
@@ -79,11 +102,12 @@ export default function PatientCameraSession() {
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: '#000', overflow: 'hidden',
-      fontFamily: '"Inter", sans-serif',
-    }}>
+    <PatientApprovalGate showNav={false}>
+      <div style={{
+        position: 'fixed', inset: 0,
+        background: '#000', overflow: 'hidden',
+        fontFamily: '"Inter", sans-serif',
+      }}>
       {/* Simulated camera feed */}
       <div style={{
         position: 'absolute', inset: 0,
@@ -149,7 +173,7 @@ export default function PatientCameraSession() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>
-          {exercise?.name || 'Exercise'}
+          {exerciseName}
         </div>
         <div style={{ fontSize: 17, color: '#fff', fontWeight: 600, textAlign: 'center', flex: 1, padding: '0 16px' }}>
           {FEEDBACK_MSGS[feedbackIdx]}
@@ -222,6 +246,7 @@ export default function PatientCameraSession() {
           <div style={{ width: 16, height: 16, background: '#fff', borderRadius: 3 }} />
         </button>
       </div>
-    </div>
+      </div>
+    </PatientApprovalGate>
   )
 }

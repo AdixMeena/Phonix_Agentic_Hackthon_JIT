@@ -32,8 +32,20 @@ function MessageIcon() {
   )
 }
 
+function DoctorIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4" />
+      <path d="M10 4h4" />
+      <circle cx="12" cy="12" r="6" />
+      <path d="M8 20h8" />
+    </svg>
+  )
+}
+
 const tabs = [
   { label: 'Home', path: '/patient', icon: HomeIcon },
+  { label: 'Doctors', path: '/patient/find-doctor', icon: DoctorIcon },
   { label: 'Exercises', path: '/patient/exercises', icon: ExerciseIcon },
   { label: 'Progress', path: '/patient/progress', icon: ProgressIcon },
   { label: 'Feedback', path: '/patient/feedback', icon: MessageIcon },

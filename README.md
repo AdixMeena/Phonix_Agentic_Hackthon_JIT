@@ -109,6 +109,37 @@ Click "Sign in" without any credentials to enter the demo.
 
 ---
 
+## Supabase SQL editor prompt
+
+Use this in Supabase SQL Editor to add the connections table and RLS policies:
+
+```sql
+create extension if not exists "uuid-ossp";
+
+create table if not exists public.connections (
+  id          uuid primary key default uuid_generate_v4(),
+  patient_id  uuid not null references auth.users(id) on delete cascade,
+  doctor_id   uuid not null references auth.users(id) on delete cascade,
+  status      text not null check (status in ('pending', 'approved', 'rejected')),
+  created_at  timestamptz default now(),
+  unique (patient_id, doctor_id)
+);
+
+alter table public.connections enable row level security;
+create policy "Patients can create requests" on public.connections for insert with check (
+  auth.uid() = patient_id
+);
+create policy "Patients can view their connections" on public.connections for select using (
+  auth.uid() = patient_id
+);
+create policy "Doctors can view their connections" on public.connections for select using (
+  auth.uid() = doctor_id
+);
+create policy "Doctors can update request status" on public.connections for update using (
+  auth.uid() = doctor_id
+);
+```
+
 ## Design system
 
 Apple-inspired precision editorial system. See the full spec in the project document.

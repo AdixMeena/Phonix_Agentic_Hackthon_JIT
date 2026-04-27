@@ -42,8 +42,13 @@ alter table public.profiles enable row level security;
 create policy "Users can view own profile"   on public.profiles for select using (auth.uid() = id);
 create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
 -- Doctors can view all profiles to find their patients
+drop policy if exists "Doctors can view all profiles" on public.profiles;
 create policy "Doctors can view all profiles" on public.profiles for select using (
-  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'doctor')
+  (auth.jwt() -> 'user_metadata' ->> 'role') = 'doctor'
+);
+-- Patients can view doctor profiles for discovery
+create policy "Patients can view doctor profiles" on public.profiles for select using (
+  auth.role() = 'authenticated' and role = 'doctor'
 );
 
 -- =============================================================================
@@ -72,6 +77,41 @@ create policy "Patients can view own record" on public.patients for select using
 );
 create policy "Doctors can insert patients"  on public.patients for insert with check (auth.uid() = doctor_id);
 create policy "Doctors can update patients"  on public.patients for update using (auth.uid() = doctor_id);
+
+-- =============================================================================
+-- 2.1 CONNECTIONS (patient ↔ doctor requests)
+-- =============================================================================
+create table if not exists public.connections (
+  id          uuid primary key default uuid_generate_v4(),
+  patient_id  uuid not null references auth.users(id) on delete cascade,
+  doctor_id   uuid not null references auth.users(id) on delete cascade,
+  status      text not null check (status in ('pending', 'approved', 'rejected')),
+  created_at  timestamptz default now(),
+  unique (patient_id, doctor_id)
+);
+
+alter table public.connections enable row level security;
+create policy "Patients can create requests" on public.connections for insert with check (
+  auth.uid() = patient_id
+);
+create policy "Doctors can create connections" on public.connections for insert with check (
+  auth.uid() = doctor_id
+);
+create policy "Patients can view their connections" on public.connections for select using (
+  auth.uid() = patient_id
+);
+create policy "Patients can delete their connections" on public.connections for delete using (
+  auth.uid() = patient_id
+);
+create policy "Doctors can view their connections" on public.connections for select using (
+  auth.uid() = doctor_id
+);
+create policy "Doctors can delete their connections" on public.connections for delete using (
+  auth.uid() = doctor_id
+);
+create policy "Doctors can update request status" on public.connections for update using (
+  auth.uid() = doctor_id
+);
 
 -- =============================================================================
 -- 3. EXERCISES  (exercise library — readable by everyone logged in)

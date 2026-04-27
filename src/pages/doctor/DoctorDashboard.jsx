@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DoctorHeader from '../../components/DoctorHeader.jsx'
 import { Card, ScoreBadge } from '../../components/UI.jsx'
-import { patients } from '../../data.js'
+import { supabase } from '../../lib/supabase.js'
+import { AuthContext } from '../../App.jsx'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 
 function MiniChart({ data }) {
@@ -28,15 +29,149 @@ function StatCard({ label, value, sub }) {
 
 export default function DoctorDashboard() {
   const navigate = useNavigate()
+  const { user } = useContext(AuthContext)
   const [search, setSearch] = useState('')
   const [focused, setFocused] = useState(false)
+  const [patients, setPatients] = useState([])
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadDoctorData() {
+      if (!user) return
+      setError('')
+      setLoading(true)
+
+      const { data: connectionRows, error: connectionError } = await supabase
+        .from('connections')
+        .select('id, patient_id, status, created_at')
+        .eq('doctor_id', user.id)
+
+      if (connectionError) {
+        if (isMounted) {
+          setError(connectionError.message)
+          setLoading(false)
+        }
+        return
+      }
+
+      const pendingConnections = (connectionRows || []).filter(row => row.status === 'pending')
+      const approvedConnections = (connectionRows || []).filter(row => row.status === 'approved')
+
+      const pendingIds = pendingConnections.map(row => row.patient_id)
+      const approvedIds = approvedConnections.map(row => row.patient_id)
+
+      let profileMap = new Map()
+      const profileIds = Array.from(new Set([...pendingIds, ...approvedIds]))
+      if (profileIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, name, specialization, role')
+          .in('id', profileIds)
+
+        if (profileError) {
+          if (isMounted) {
+            setError(profileError.message)
+            setLoading(false)
+          }
+          return
+        }
+
+        profileMap = new Map((profileRows || []).map(row => [row.id, row]))
+      }
+
+      let patientRows = []
+      if (approvedIds.length > 0) {
+        const { data: rows, error: patientError } = await supabase
+          .from('patients')
+          .select('*')
+          .in('user_id', approvedIds)
+
+        if (patientError) {
+          if (isMounted) {
+            setError(patientError.message)
+            setLoading(false)
+          }
+          return
+        }
+
+        patientRows = rows || []
+      }
+
+      const patientMap = new Map(patientRows.map(row => [row.user_id, row]))
+
+      const normalizedPatients = approvedIds.map(patientId => {
+        const row = patientMap.get(patientId)
+        const profile = profileMap.get(patientId)
+        const progress = Array.isArray(row?.progress) && row.progress.length > 0
+          ? row.progress
+          : [62, 64, 66, 68, 70, 72, 74]
+
+        return {
+          id: patientId,
+          patientRowId: row?.id,
+          name: row?.name || profile?.name || 'Unknown patient',
+          condition: row?.condition || 'Recovery plan',
+          score: row?.score ?? 0,
+          streak: row?.streak ?? 0,
+          progress,
+          lastSession: row?.created_at
+            ? new Date(row.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+            : 'No sessions yet',
+        }
+      })
+
+      const normalizedRequests = pendingConnections.map(row => {
+        const profile = profileMap.get(row.patient_id)
+        return {
+          id: row.id,
+          patientId: row.patient_id,
+          name: profile?.name || 'Unknown patient',
+          requestedAt: row.created_at,
+        }
+      })
+
+      if (isMounted) {
+        setPatients(normalizedPatients)
+        setRequests(normalizedRequests)
+        setLoading(false)
+      }
+    }
+
+    loadDoctorData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user, refreshKey])
+
+  async function updateRequest(connectionId, status) {
+    setError('')
+    const { error: updateError } = await supabase
+      .from('connections')
+      .update({ status })
+      .eq('id', connectionId)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setRefreshKey(k => k + 1)
+  }
 
   const filtered = patients.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.condition.toLowerCase().includes(search.toLowerCase())
   )
 
-  const avgScore = Math.round(patients.reduce((a, b) => a + b.score, 0) / patients.length)
+  const avgScore = patients.length > 0
+    ? Math.round(patients.reduce((a, b) => a + b.score, 0) / patients.length)
+    : 0
   const sessionToday = 3
 
   return (
@@ -61,6 +196,68 @@ export default function DoctorDashboard() {
           <StatCard label="Alerts" value={patients.filter(p => p.score < 50).length} sub="Needs attention" />
         </div>
 
+        {/* Requests */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, color: '#1d1d1f', margin: 0 }}>Requests</h2>
+            <span style={{ fontSize: 13, color: '#6e6e73' }}>{requests.length} pending</span>
+          </div>
+
+          {error && (
+            <div style={{
+              background: '#ff3b3010', border: '1px solid #ff3b3030',
+              borderRadius: 12, padding: '12px 16px',
+              fontSize: 13, color: '#ff3b30', lineHeight: 1.5,
+              marginBottom: 16,
+            }}>
+              {error}
+            </div>
+          )}
+
+          {loading && (
+            <div style={{ textAlign: 'center', color: '#6e6e73', fontSize: 14, padding: '12px 0' }}>
+              Loading requests...
+            </div>
+          )}
+
+          {!loading && requests.length === 0 && (
+            <Card style={{ color: '#6e6e73', fontSize: 14 }}>No pending requests.</Card>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {requests.map(req => (
+              <Card key={req.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{req.name}</div>
+                  <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 4 }}>
+                    Requested {req.requestedAt ? new Date(req.requestedAt).toLocaleString() : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => updateRequest(req.id, 'approved')}
+                    style={{
+                      background: '#34c759', color: '#fff', border: 'none',
+                      borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                    }}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => updateRequest(req.id, 'rejected')}
+                    style={{
+                      background: '#ff3b30', color: '#fff', border: 'none',
+                      borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                    }}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+
         {/* Search */}
         <div style={{ marginBottom: 20 }}>
           <input
@@ -81,7 +278,7 @@ export default function DoctorDashboard() {
 
         {/* Patient grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-          <AddPatientCard onClick={() => alert('Add patient flow coming soon.')} />
+          <AddPatientCard onClick={() => navigate('/doctor/add-patient')} />
           {filtered.map(patient => (
             <PatientCard key={patient.id} patient={patient} onClick={() => navigate(`/doctor/patient/${patient.id}`)} />
           ))}

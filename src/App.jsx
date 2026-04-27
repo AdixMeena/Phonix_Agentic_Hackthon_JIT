@@ -6,11 +6,13 @@ import LoginPage from './pages/shared/LoginPage.jsx'
 import DoctorDashboard from './pages/doctor/DoctorDashboard.jsx'
 import DoctorPatientDetail from './pages/doctor/DoctorPatientDetail.jsx'
 import DoctorAssignExercise from './pages/doctor/DoctorAssignExercise.jsx'
+import DoctorAddPatient from './pages/doctor/DoctorAddPatient.jsx'
 import PatientDashboard from './pages/patient/PatientDashboard.jsx'
 import PatientExerciseDetail from './pages/patient/PatientExerciseDetail.jsx'
 import PatientCameraSession from './pages/patient/PatientCameraSession.jsx'
 import PatientScoreScreen from './pages/patient/PatientScoreScreen.jsx'
 import PatientFeedback from './pages/patient/PatientFeedback.jsx'
+import PatientFindDoctor from './pages/patient/PatientFindDoctor.jsx'
 
 export const AuthContext = React.createContext(null)
 
@@ -115,6 +117,11 @@ export default function App() {
               <DoctorAssignExercise />
             </RequireAuth>
           } />
+          <Route path="/doctor/add-patient" element={
+            <RequireAuth user={user} role={role} allowedRole="doctor">
+              <DoctorAddPatient />
+            </RequireAuth>
+          } />
 
           {/* ── Patient routes ── */}
           <Route path="/patient" element={
@@ -140,6 +147,11 @@ export default function App() {
           <Route path="/patient/feedback" element={
             <RequireAuth user={user} role={role} allowedRole="patient">
               <PatientFeedback />
+            </RequireAuth>
+          } />
+          <Route path="/patient/find-doctor" element={
+            <RequireAuth user={user} role={role} allowedRole="patient">
+              <PatientFindDoctor />
             </RequireAuth>
           } />
 

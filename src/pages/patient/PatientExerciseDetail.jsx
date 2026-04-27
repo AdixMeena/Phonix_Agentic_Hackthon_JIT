@@ -1,20 +1,67 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
 import { BtnPrimary, BtnOutline } from '../../components/UI.jsx'
-import { exercises } from '../../data.js'
+import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
+import { supabase } from '../../lib/supabase.js'
 
 export default function PatientExerciseDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const exercise = exercises.find(e => e.id === Number(id))
+  const [exercise, setExercise] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadExercise() {
+      setError('')
+      setLoading(true)
+      const { data, error: fetchError } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('id', Number(id))
+        .maybeSingle()
+
+      if (!isMounted) return
+
+      if (fetchError) {
+        setError(fetchError.message)
+        setLoading(false)
+        return
+      }
+
+      setExercise(data)
+      setLoading(false)
+    }
+
+    loadExercise()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <div style={{ padding: 24, color: '#6e6e73' }}>Loading exercise...</div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 24, color: '#ff3b30' }}>{error}</div>
+    )
+  }
 
   if (!exercise) return <div>Exercise not found</div>
 
   const jointColors = ['#34c759', '#ff9f0a', '#34c759', '#34c759']
 
   return (
-    <div style={{ background: '#fff', minHeight: '100vh', paddingBottom: 100, fontFamily: '"Inter", sans-serif' }}>
+    <PatientApprovalGate showNav>
+      <div style={{ background: '#fff', minHeight: '100vh', paddingBottom: 100, fontFamily: '"Inter", sans-serif' }}>
       {/* Back header */}
       <div style={{ padding: '56px 24px 20px', borderBottom: '1px solid #d2d2d7' }}>
         <button onClick={() => navigate('/patient')} style={{
@@ -134,7 +181,8 @@ export default function PatientExerciseDetail() {
         </BtnPrimary>
       </div>
 
-      <PatientBottomNav />
-    </div>
+        <PatientBottomNav />
+      </div>
+    </PatientApprovalGate>
   )
 }

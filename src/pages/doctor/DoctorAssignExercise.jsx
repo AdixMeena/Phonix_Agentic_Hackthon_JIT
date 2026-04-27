@@ -1,16 +1,93 @@
-import React, { useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import DoctorHeader from '../../components/DoctorHeader.jsx'
 import { Card, BtnPrimary, BtnOutline } from '../../components/UI.jsx'
-import { patients, exercises } from '../../data.js'
+import { supabase } from '../../lib/supabase.js'
+import { AuthContext } from '../../App.jsx'
 
 export default function DoctorAssignExercise() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const patient = patients.find(p => p.id === Number(id))
+  const { user } = useContext(AuthContext)
+  const [patient, setPatient] = useState(null)
+  const [exercises, setExercises] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [filterCat, setFilterCat] = useState('All')
   const [assigned, setAssigned] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadData() {
+      if (!user) return
+      setError('')
+      setLoading(true)
+
+      const { data: connectionRows, error: connectionError } = await supabase
+        .from('connections')
+        .select('status')
+        .eq('doctor_id', user.id)
+        .eq('patient_id', id)
+        .eq('status', 'approved')
+
+      if (connectionError) {
+        if (isMounted) {
+          setError(connectionError.message)
+          setLoading(false)
+        }
+        return
+      }
+
+      if (!connectionRows || connectionRows.length === 0) {
+        if (isMounted) {
+          setError('No approved connection for this patient.')
+          setLoading(false)
+        }
+        return
+      }
+
+      const { data: patientRow, error: patientError } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('user_id', id)
+        .maybeSingle()
+
+      if (patientError) {
+        if (isMounted) {
+          setError(patientError.message)
+          setLoading(false)
+        }
+        return
+      }
+
+      const { data: exerciseRows, error: exerciseError } = await supabase
+        .from('exercises')
+        .select('*')
+        .order('name', { ascending: true })
+
+      if (exerciseError) {
+        if (isMounted) {
+          setError(exerciseError.message)
+          setLoading(false)
+        }
+        return
+      }
+
+      if (isMounted) {
+        setPatient(patientRow)
+        setExercises(exerciseRows || [])
+        setLoading(false)
+      }
+    }
+
+    loadData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user, id])
 
   const categories = ['All', ...new Set(exercises.map(e => e.category))]
   const filtered = filterCat === 'All' ? exercises : exercises.filter(e => e.category === filterCat)
@@ -24,14 +101,49 @@ export default function DoctorAssignExercise() {
   }
 
   function handleAssign() {
+    if (!patient?.id || selected.size === 0) return
     setAssigned(true)
-    setTimeout(() => navigate(`/doctor/patient/${id}`), 1200)
+
+    const rows = Array.from(selected).map(exerciseId => ({
+      patient_id: patient.id,
+      exercise_id: exerciseId,
+      status: 'pending',
+    }))
+
+    supabase
+      .from('patient_exercises')
+      .upsert(rows, { onConflict: 'patient_id,exercise_id' })
+      .then(({ error: insertError }) => {
+        if (insertError) {
+          setError(insertError.message)
+          setAssigned(false)
+          return
+        }
+        setTimeout(() => navigate(`/doctor/patient/${id}`), 800)
+      })
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f7' }}>
       <DoctorHeader />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px 48px' }}>
+        {error && (
+          <div style={{
+            background: '#ff3b3010', border: '1px solid #ff3b3030',
+            borderRadius: 12, padding: '12px 16px',
+            fontSize: 13, color: '#ff3b30', lineHeight: 1.5,
+            marginBottom: 16,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div style={{ textAlign: 'center', color: '#6e6e73', fontSize: 14, padding: '12px 0' }}>
+            Loading exercises...
+          </div>
+        )}
+
         <button onClick={() => navigate(`/doctor/patient/${id}`)} style={{
           background: 'none', border: 'none', color: '#0071e3',
           fontSize: 14, cursor: 'pointer', marginBottom: 24, padding: 0,
@@ -117,9 +229,9 @@ export default function DoctorAssignExercise() {
           <BtnOutline onClick={() => navigate(`/doctor/patient/${id}`)}>Cancel</BtnOutline>
           <BtnPrimary
             onClick={handleAssign}
-            style={{ opacity: selected.size === 0 ? 0.4 : 1 }}
+            style={{ opacity: selected.size === 0 || assigned ? 0.4 : 1 }}
           >
-            {assigned ? 'Assigned ✓' : `Assign ${selected.size > 0 ? selected.size : ''} exercise${selected.size !== 1 ? 's' : ''}`}
+            {assigned ? 'Assigning…' : `Assign ${selected.size > 0 ? selected.size : ''} exercise${selected.size !== 1 ? 's' : ''}`}
           </BtnPrimary>
           {selected.size > 0 && (
             <span style={{ fontSize: 14, color: '#6e6e73' }}>
