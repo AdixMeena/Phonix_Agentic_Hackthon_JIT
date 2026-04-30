@@ -11,10 +11,11 @@ import math
 import cv2
 import mediapipe as mp
 import numpy as np
+from openai import OpenAI
 
 load_dotenv()
 
-# ── Optional: Supabase client for saving sessions ─────────────────────────────
+# ── Supabase client ───────────────────────────────────────────────────────────
 try:
     from supabase import create_client, Client
     _url  = os.getenv("SUPABASE_URL", "")
@@ -23,11 +24,18 @@ try:
 except Exception:
     supabase = None
 
+# ── Groq client ───────────────────────────────────────────────────────────────
+_groq_key = os.getenv("GROQ_API_KEY", "")
+groq_client: Optional[OpenAI] = (
+    OpenAI(api_key=_groq_key, base_url="https://api.groq.com/openai/v1")
+    if _groq_key else None
+)
+
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Phoenix-AI Backend",
     description="REST API for the Phoenix-AI rehabilitation platform",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -49,17 +57,22 @@ class JointScore(BaseModel):
     status: str   # "good" | "warning"
 
 class SessionResult(BaseModel):
-    patient_id:  str
-    exercise_id: int
-    score:       int
-    reps:        int
-    duration:    int          # seconds
+    patient_id:   str
+    exercise_id:  int
+    score:        int
+    reps:         int
+    duration:     int
     joint_scores: List[JointScore]
 
 class FeedbackPayload(BaseModel):
     patient_id: str
     doctor_id:  str
     message:    str
+
+class AnalyzeRequest(BaseModel):
+    session_id:  str
+    patient_id:  str
+    exercise_id: int
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def score_label(score: int) -> str:
@@ -72,27 +85,26 @@ def score_label(score: int) -> str:
 
 
 DEFAULT_RANGES = {
-    "left_knee": (80, 160),
-    "right_knee": (80, 160),
-    "left_hip": (60, 140),
-    "right_hip": (60, 140),
-    "left_shoulder": (30, 110),
+    "left_knee":      (80, 160),
+    "right_knee":     (80, 160),
+    "left_hip":       (60, 140),
+    "right_hip":      (60, 140),
+    "left_shoulder":  (30, 110),
     "right_shoulder": (30, 110),
-    "spine": (150, 180),
+    "spine":          (150, 180),
 }
 
 EXERCISE_TARGETS = {
-    1: {"primary": "left_knee", "ranges": {"left_knee": (90, 120), "right_knee": (90, 120), "left_hip": (70, 120)}},
-    2: {"primary": "left_hip", "ranges": {"left_hip": (30, 60), "right_hip": (30, 60)}},
-    3: {"primary": "left_knee", "ranges": {"left_knee": (0, 20), "right_knee": (0, 20)}},
+    1: {"primary": "left_knee",     "ranges": {"left_knee": (90, 120),  "right_knee": (90, 120),  "left_hip": (70, 120)}},
+    2: {"primary": "left_hip",      "ranges": {"left_hip":  (30, 60),   "right_hip":  (30, 60)}},
+    3: {"primary": "left_knee",     "ranges": {"left_knee": (0, 20),    "right_knee": (0, 20)}},
     4: {"primary": "left_shoulder", "ranges": {"left_shoulder": (20, 60), "right_shoulder": (20, 60)}},
     5: {"primary": "left_shoulder", "ranges": {"left_shoulder": (40, 80), "right_shoulder": (40, 80)}},
-    6: {"primary": "spine", "ranges": {"spine": (165, 180)}},
-    7: {"primary": "spine", "ranges": {"spine": (140, 175)}},
+    6: {"primary": "spine",         "ranges": {"spine": (165, 180)}},
+    7: {"primary": "spine",         "ranges": {"spine": (140, 175)}},
     8: {"primary": "left_shoulder", "ranges": {"left_shoulder": (20, 60), "right_shoulder": (20, 60)}},
     9: {"primary": "left_shoulder", "ranges": {"left_shoulder": (20, 60), "right_shoulder": (20, 60)}},
 }
-
 
 POSE_CONNECTIONS = [
     (11, 13), (13, 15), (12, 14), (14, 16),
@@ -127,20 +139,26 @@ def score_for_angle(angle, low, high):
     deviation = min(abs(angle - low), abs(angle - high))
     return max(0, int(round(100 - deviation * 2)))
 
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "Phoenix-AI Backend", "supabase_connected": supabase is not None}
+    return {
+        "status": "ok",
+        "service": "Phoenix-AI Backend",
+        "supabase_connected": supabase is not None,
+        "groq_connected": groq_client is not None,
+    }
 
 
 @app.websocket("/ws/session/{session_id}")
 async def session_ws(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
-    exercise_id = int(websocket.query_params.get("exercise_id", "0"))
-    target_config = EXERCISE_TARGETS.get(exercise_id, {"primary": "left_knee", "ranges": {}})
-    primary_joint = target_config["primary"]
-    target_ranges = {**DEFAULT_RANGES, **target_config["ranges"]}
+    exercise_id    = int(websocket.query_params.get("exercise_id", "0"))
+    target_config  = EXERCISE_TARGETS.get(exercise_id, {"primary": "left_knee", "ranges": {}})
+    primary_joint  = target_config["primary"]
+    target_ranges  = {**DEFAULT_RANGES, **target_config["ranges"]}
 
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose(
@@ -158,18 +176,15 @@ async def session_ws(websocket: WebSocket, session_id: str):
         while True:
             payload = await websocket.receive_text()
             try:
-                data = json.loads(payload)
+                data      = json.loads(payload)
                 frame_b64 = data.get("frame", "")
             except json.JSONDecodeError:
                 frame_b64 = payload
 
             if not frame_b64:
                 await websocket.send_text(json.dumps({
-                    "landmarks": [],
-                    "joint_scores": {},
-                    "session_score": 0,
-                    "rep_counted": False,
-                    "feedback": "No frame data",
+                    "landmarks": [], "joint_scores": {}, "session_score": 0,
+                    "rep_counted": False, "feedback": "No frame data",
                 }))
                 continue
 
@@ -177,29 +192,23 @@ async def session_ws(websocket: WebSocket, session_id: str):
                 frame_b64 = frame_b64.split(",", 1)[1]
 
             img_bytes = base64.b64decode(frame_b64)
-            np_arr = np.frombuffer(img_bytes, np.uint8)
-            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            np_arr    = np.frombuffer(img_bytes, np.uint8)
+            frame     = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
             if frame is None:
                 await websocket.send_text(json.dumps({
-                    "landmarks": [],
-                    "joint_scores": {},
-                    "session_score": 0,
-                    "rep_counted": False,
-                    "feedback": "Invalid frame",
+                    "landmarks": [], "joint_scores": {}, "session_score": 0,
+                    "rep_counted": False, "feedback": "Invalid frame",
                 }))
                 continue
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             result = pose.process(rgb)
 
             if not result.pose_landmarks:
                 await websocket.send_text(json.dumps({
-                    "landmarks": [],
-                    "joint_scores": {},
-                    "session_score": 0,
-                    "rep_counted": False,
-                    "feedback": "No pose detected",
+                    "landmarks": [], "joint_scores": {}, "session_score": 0,
+                    "rep_counted": False, "feedback": "No pose detected",
                 }))
                 continue
 
@@ -212,35 +221,35 @@ async def session_ws(websocket: WebSocket, session_id: str):
                     return None
                 return [landmarks[idx]["x"], landmarks[idx]["y"], landmarks[idx]["z"]]
 
-            left_shoulder = lm(11)
+            left_shoulder  = lm(11)
             right_shoulder = lm(12)
-            left_elbow = lm(13)
-            right_elbow = lm(14)
-            left_hip = lm(23)
-            right_hip = lm(24)
-            left_knee = lm(25)
-            right_knee = lm(26)
-            left_ankle = lm(27)
-            right_ankle = lm(28)
+            left_elbow     = lm(13)
+            right_elbow    = lm(14)
+            left_hip       = lm(23)
+            right_hip      = lm(24)
+            left_knee      = lm(25)
+            right_knee     = lm(26)
+            left_ankle     = lm(27)
+            right_ankle    = lm(28)
 
             shoulder_center = midpoint(left_shoulder, right_shoulder)
-            hip_center = midpoint(left_hip, right_hip)
-            knee_center = midpoint(left_knee, right_knee)
+            hip_center      = midpoint(left_hip, right_hip)
+            knee_center     = midpoint(left_knee, right_knee)
 
             angles = {
-                "left_knee": angle_degrees(left_hip, left_knee, left_ankle),
-                "right_knee": angle_degrees(right_hip, right_knee, right_ankle),
-                "left_hip": angle_degrees(left_shoulder, left_hip, left_knee),
-                "right_hip": angle_degrees(right_shoulder, right_hip, right_knee),
-                "left_shoulder": angle_degrees(left_elbow, left_shoulder, left_hip),
-                "right_shoulder": angle_degrees(right_elbow, right_shoulder, right_hip),
-                "spine": angle_degrees(shoulder_center, hip_center, knee_center),
+                "left_knee":      angle_degrees(left_hip,       left_knee,   left_ankle),
+                "right_knee":     angle_degrees(right_hip,      right_knee,  right_ankle),
+                "left_hip":       angle_degrees(left_shoulder,  left_hip,    left_knee),
+                "right_hip":      angle_degrees(right_shoulder, right_hip,   right_knee),
+                "left_shoulder":  angle_degrees(left_elbow,     left_shoulder, left_hip),
+                "right_shoulder": angle_degrees(right_elbow,    right_shoulder, right_hip),
+                "spine":          angle_degrees(shoulder_center, hip_center,  knee_center),
             }
 
             joint_scores = {}
             score_values = []
-            worst_joint = None
-            worst_score = 101
+            worst_joint  = None
+            worst_score  = 101
 
             for joint, (low, high) in target_ranges.items():
                 score = score_for_angle(angles.get(joint), low, high)
@@ -252,11 +261,11 @@ async def session_ws(websocket: WebSocket, session_id: str):
 
             session_score = int(round(sum(score_values) / len(score_values))) if score_values else 0
 
-            rep_counted = False
+            rep_counted   = False
             primary_range = target_ranges.get(primary_joint)
             if primary_range:
                 midpoint_angle = (primary_range[0] + primary_range[1]) / 2
-                current_angle = angles.get(primary_joint)
+                current_angle  = angles.get(primary_joint)
                 if current_angle is not None:
                     above = current_angle >= midpoint_angle
                     if rep_phase == 0 and above:
@@ -274,11 +283,11 @@ async def session_ws(websocket: WebSocket, session_id: str):
                 feedback = "Hold steady"
 
             await websocket.send_text(json.dumps({
-                "landmarks": landmarks,
+                "landmarks":    landmarks,
                 "joint_scores": joint_scores,
                 "session_score": session_score,
-                "rep_counted": rep_counted,
-                "feedback": feedback,
+                "rep_counted":  rep_counted,
+                "feedback":     feedback,
             }))
 
     except WebSocketDisconnect:
@@ -292,6 +301,7 @@ async def save_session(result: SessionResult):
     """
     Called after a patient completes a camera session.
     Persists the session score + joint breakdown to Supabase.
+    Returns the new session ID so the frontend can call /analyze next.
     """
     payload = {
         "patient_id":   result.patient_id,
@@ -306,12 +316,201 @@ async def save_session(result: SessionResult):
     if supabase:
         try:
             data = supabase.table("sessions").insert(payload).execute()
-            return {"success": True, "data": data.data, "label": payload["label"]}
+            session_id = data.data[0]["id"] if data.data else None
+            return {"success": True, "session_id": session_id, "data": data.data, "label": payload["label"]}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    # If Supabase not configured, still return success (demo mode)
-    return {"success": True, "data": payload, "label": payload["label"], "note": "Supabase not configured — data not persisted"}
+    return {
+        "success": True,
+        "session_id": None,
+        "data": payload,
+        "label": payload["label"],
+        "note": "Supabase not configured — data not persisted",
+    }
+
+
+@app.post("/analyze")
+async def analyze_session(req: AnalyzeRequest):
+    """
+    AI agent endpoint. Call this right after /session returns a session_id.
+    Fetches session data + exercise definition + patient history,
+    sends to Groq (Llama 3.3 70B), saves analysis to session_analysis table,
+    returns the full analysis to the frontend.
+    """
+
+    # ── 1. Fetch the session that was just saved ──────────────────────────────
+    session_data = None
+    if supabase:
+        try:
+            res          = supabase.table("sessions").select("*").eq("id", req.session_id).single().execute()
+            session_data = res.data
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Session not found: {e}")
+
+    # Fallback demo data if Supabase not connected
+    if not session_data:
+        session_data = {
+            "score": 72, "reps": 10, "duration": 120,
+            "joint_scores": [], "label": "Good effort",
+        }
+
+    # ── 2. Fetch exercise definition (target angles + common mistakes) ─────────
+    exercise_data = None
+    if supabase:
+        try:
+            res           = supabase.table("exercises").select("*").eq("id", req.exercise_id).single().execute()
+            exercise_data = res.data
+        except Exception:
+            exercise_data = None
+
+    if not exercise_data:
+        exercise_data = {
+            "name": "Exercise",
+            "target_angle": "Variable",
+            "target_angle_min": 0,
+            "target_angle_max": 180,
+            "common_mistakes": ["Incorrect form", "Insufficient range of motion"],
+            "instructions": "Follow prescribed exercise guidelines.",
+        }
+
+    # ── 3. Fetch last 3 sessions for this patient + exercise (trend) ──────────
+    past_sessions = []
+    if supabase:
+        try:
+            res = (
+                supabase.table("sessions")
+                .select("score, reps, duration, created_at")
+                .eq("patient_id", req.patient_id)
+                .eq("exercise_id", req.exercise_id)
+                .neq("id", req.session_id)
+                .order("created_at", desc=True)
+                .limit(3)
+                .execute()
+            )
+            past_sessions = res.data or []
+        except Exception:
+            past_sessions = []
+
+    # ── 4. Build structured prompt for Groq ───────────────────────────────────
+    joint_scores_summary = ""
+    if session_data.get("joint_scores"):
+        for j in session_data["joint_scores"]:
+            joint_scores_summary += f"  - {j['name']}: {j['score']}/100 ({j['status']})\n"
+    else:
+        joint_scores_summary = "  - Joint score data not available\n"
+
+    trend_summary = ""
+    if past_sessions:
+        for i, s in enumerate(past_sessions, 1):
+            trend_summary += f"  - Session -{i}: score={s['score']}, reps={s['reps']}, duration={s['duration']}s\n"
+    else:
+        trend_summary = "  - No previous sessions for this exercise\n"
+
+    prompt = f"""You are a physiotherapy AI assistant. Analyze this exercise session and return ONLY a valid JSON object — no explanation, no markdown, no extra text.
+
+EXERCISE INFORMATION:
+- Name: {exercise_data.get('name', 'Unknown')}
+- Target angle range: {exercise_data.get('target_angle_min', 0)}° to {exercise_data.get('target_angle_max', 180)}°
+- Instructions: {exercise_data.get('instructions', 'N/A')}
+- Known common mistakes for this exercise:
+{chr(10).join(f"  * {m}" for m in (exercise_data.get('common_mistakes') or []))}
+
+CURRENT SESSION DATA:
+- Overall score: {session_data.get('score', 0)}/100
+- Reps completed: {session_data.get('reps', 0)}
+- Duration: {session_data.get('duration', 0)} seconds
+- Per-joint scores:
+{joint_scores_summary}
+
+PATIENT HISTORY (last 3 sessions for this exercise):
+{trend_summary}
+
+Return this exact JSON structure:
+{{
+  "overall_score": <integer 0-100, your assessed score based on the data>,
+  "completion_confirmed": <true if reps > 0 and score >= 50, false otherwise>,
+  "mistakes": [<list of specific mistake strings based on joint scores and known mistakes, max 4>],
+  "patient_message": "<exactly 2 sentences: one positive observation, one specific improvement tip>",
+  "doctor_report": "<3-4 sentence clinical summary: what the patient did, joint performance, key issues, recommendation>",
+  "trend_note": "<1 sentence comparing this session to past sessions, or 'First session recorded' if no history>"
+}}"""
+
+    # ── 5. Call Groq ──────────────────────────────────────────────────────────
+    analysis = None
+
+    if groq_client:
+        try:
+            response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a physiotherapy AI assistant. Always respond with valid JSON only. No markdown, no explanation, no code blocks.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=800,
+            )
+            raw = response.choices[0].message.content.strip()
+
+            # Strip any accidental markdown code fences
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+
+            analysis = json.loads(raw)
+
+        except json.JSONDecodeError:
+            # Groq returned something unparseable — use fallback
+            analysis = None
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Groq API error: {e}")
+
+    # ── 6. Fallback if Groq not available or parse failed ────────────────────
+    if analysis is None:
+        score = session_data.get("score", 0)
+        analysis = {
+            "overall_score":        score,
+            "completion_confirmed": session_data.get("reps", 0) > 0 and score >= 50,
+            "mistakes":             ["Groq not configured — automated analysis unavailable"],
+            "patient_message":      f"You completed the session with a score of {score}/100. Keep practicing consistently for best results.",
+            "doctor_report":        f"Patient completed {session_data.get('reps', 0)} reps over {session_data.get('duration', 0)} seconds with a score of {score}/100. Automated AI analysis was unavailable for this session.",
+            "trend_note":           "Trend analysis unavailable.",
+        }
+
+    # ── 7. Save analysis to Supabase ──────────────────────────────────────────
+    saved_analysis_id = None
+    if supabase:
+        try:
+            row = {
+                "session_id":           req.session_id,
+                "patient_id":           req.patient_id,
+                "exercise_id":          req.exercise_id,
+                "overall_score":        analysis.get("overall_score"),
+                "completion_confirmed": analysis.get("completion_confirmed"),
+                "mistakes":             analysis.get("mistakes", []),
+                "patient_message":      analysis.get("patient_message"),
+                "doctor_report":        analysis.get("doctor_report"),
+                "trend_note":           analysis.get("trend_note"),
+            }
+            res = supabase.table("session_analysis").insert(row).execute()
+            if res.data:
+                saved_analysis_id = res.data[0]["id"]
+        except Exception as e:
+            # Don't block the response — just log and continue
+            print(f"[analyze] Failed to save analysis to Supabase: {e}")
+
+    # ── 8. Return to frontend ─────────────────────────────────────────────────
+    return {
+        "success":       True,
+        "analysis_id":   saved_analysis_id,
+        "session_id":    req.session_id,
+        **analysis,
+    }
 
 
 @app.get("/patient/{patient_id}/stats")
@@ -338,6 +537,29 @@ async def get_patient_stats(patient_id: str):
             "best_score":     max(scores) if scores else 0,
             "last_session":   items[0] if items else None,
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analysis/{patient_id}")
+async def get_patient_analysis(patient_id: str, limit: int = 10):
+    """
+    Returns recent session analyses for a patient.
+    Used by DoctorPatientDetail and PatientProfile to show AI reports.
+    """
+    if not supabase:
+        return {"data": [], "note": "Supabase not configured"}
+
+    try:
+        res = (
+            supabase.table("session_analysis")
+            .select("*, sessions(exercise_id, reps, duration, created_at)")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return {"data": res.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
