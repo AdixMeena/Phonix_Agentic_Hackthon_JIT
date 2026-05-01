@@ -1,7 +1,9 @@
 // src/pages/patient/PatientHealthChat.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useContext } from 'react'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
 import PatientHeader from '../../components/PatientHeader.jsx'
+import { AuthContext } from '../../App.jsx'
+import { supabase } from '../../lib/supabase.js'
 
 const API_KEY = import.meta.env.VITE_GROQ_API_KEY
 
@@ -124,14 +126,41 @@ function MessageBubble({ message }) {
 }
 
 export default function PatientHealthChat() {
+  const { user } = useContext(AuthContext)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showSuggested, setShowSuggested] = useState(true)
   const [inputFocused, setInputFocused] = useState(false)
+  const [doctorName, setDoctorName] = useState('Your Doctor')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const chatHistoryRef = useRef([])
+
+  useEffect(() => {
+    async function getDoctor() {
+      if (!user) return
+      try {
+        const { data: pData } = await supabase
+          .from('patients')
+          .select('doctor_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (pData?.doctor_id) {
+          const { data: dProf } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', pData.doctor_id)
+            .maybeSingle()
+          if (dProf?.name) setDoctorName(dProf.name)
+        }
+      } catch (e) {
+        console.error("Error fetching doctor:", e)
+      }
+    }
+    getDoctor()
+  }, [user])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -257,7 +286,7 @@ export default function PatientHealthChat() {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>Dr. Rajesh Kumar</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>{doctorName}</div>
               <div style={{ fontSize: 11, color: '#6e6e73' }}>+91 7489877983</div>
             </div>
           </div>
