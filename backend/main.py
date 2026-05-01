@@ -43,9 +43,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
-        "http://127.0.0.1:5173",
+        "https://neptune-ph.vercel.app",   # ← add your real Vercel URL
     ],
-    allow_origin_regex="https://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
