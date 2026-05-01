@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Install system dependencies that OpenCV + MediaPipe need
+# Install system dependencies that MediaPipe and OpenCV need
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libstdc++6 \
+    libgomp1 \
+    libusb-1.0-0 \
+    libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

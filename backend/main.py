@@ -255,7 +255,12 @@ async def session_ws(websocket: WebSocket, session_id: str):
             min_tracking_confidence=0.5,
         )
     except Exception as e:
-        print(f"MediaPipe Init Error: {e}")
+        err_msg = f"MediaPipe Init Error: {str(e)}"
+        print(err_msg)
+        try:
+            await websocket.send_text(json.dumps({"error": err_msg, "feedback": "System Error"}))
+        except:
+            pass
         await websocket.close(code=1011)
         return
 
