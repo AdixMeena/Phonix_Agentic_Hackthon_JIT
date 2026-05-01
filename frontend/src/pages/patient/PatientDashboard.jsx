@@ -120,7 +120,7 @@ export default function PatientDashboard() {
 
   return (
     <PatientApprovalGate showNav>
-      <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 88, fontFamily: '"Inter", sans-serif' }}>
+      <div style={{ background: 'rgba(245, 245, 247, 0.4)', backdropFilter: 'blur(10px)', minHeight: '100vh', paddingBottom: 88, fontFamily: '"Inter", sans-serif' }}>
         <PatientHeader />
 
         <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px 48px' }}>
