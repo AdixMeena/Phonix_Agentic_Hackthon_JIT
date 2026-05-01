@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 import { Card } from '../../components/UI.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../../lib/supabase.js'
@@ -235,33 +236,27 @@ export default function PatientProfile() {
 
   return (
     <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 88, fontFamily: '"Inter", sans-serif' }}>
+      <PatientHeader />
 
-      {/* ── Sticky header ── */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 20,
-        background: '#ffffff',
-        borderBottom: '1px solid #e5e5ea',
-      }}>
-        <div style={{
-          maxWidth: 1200, margin: '0 auto',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 24px',
-        }}>
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+
+        {/* Page title + Edit controls */}
+        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: '"Inter Tight", sans-serif', color: '#1d1d1f' }}>
+            <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>
               My profile
-            </div>
-            <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 2 }}>
+            </h1>
+            <p style={{ fontSize: 17, color: '#6e6e73', marginTop: 8 }}>
               Your recovery details and account settings
-            </div>
+            </p>
           </div>
           {!editing
             ? <button onClick={() => setEditing(true)} style={{
                 background: 'none', border: '1px solid #d2d2d7', borderRadius: 10,
                 padding: '6px 16px', fontSize: 13, fontWeight: 600, color: '#1d1d1f',
-                cursor: 'pointer',
+                cursor: 'pointer', marginTop: 8,
               }}>Edit</button>
-            : <div style={{ display: 'flex', gap: 8 }}>
+            : <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button onClick={() => setEditing(false)} style={{
                   background: 'none', border: '1px solid #d2d2d7', borderRadius: 10,
                   padding: '6px 16px', fontSize: 13, fontWeight: 600, color: '#6e6e73', cursor: 'pointer',
@@ -272,19 +267,6 @@ export default function PatientProfile() {
                 }}>Save</button>
               </div>
           }
-        </div>
-      </header>
-
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-
-        {/* Page title */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>
-            My profile
-          </h1>
-          <p style={{ fontSize: 17, color: '#6e6e73', marginTop: 8 }}>
-            Your recovery details and account settings
-          </p>
         </div>
 
         {error && (

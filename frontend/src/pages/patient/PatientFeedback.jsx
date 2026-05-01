@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { AuthContext } from '../../App.jsx'
@@ -54,15 +55,15 @@ export default function PatientFeedback() {
   return (
     <PatientApprovalGate showNav>
       <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 80, fontFamily: '"Inter", sans-serif' }}>
-        {/* Header */}
-        <div style={{ background: '#fff', padding: '56px 24px 20px', borderBottom: '1px solid #d2d2d7' }}>
-          <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>
-            Feedback
-          </h1>
-          <p style={{ fontSize: 17, color: '#6e6e73', marginTop: 6 }}>Messages from your physiotherapist</p>
-        </div>
+        <PatientHeader />
 
         <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ marginBottom: 32 }}>
+            <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>
+              Feedback
+            </h1>
+            <p style={{ fontSize: 17, color: '#6e6e73', marginTop: 6 }}>Messages from your physiotherapist</p>
+          </div>
           {error && (
             <div style={{
               background: '#ff3b3010', border: '1px solid #ff3b3030',

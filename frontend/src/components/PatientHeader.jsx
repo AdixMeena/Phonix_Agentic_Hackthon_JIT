@@ -3,17 +3,23 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { AuthContext } from '../App.jsx'
 import { supabase } from '../lib/supabase.js'
 
-export default function DoctorHeader({ requestCount = 0 }) {
+export default function PatientHeader() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useContext(AuthContext)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-  const doctorName = user?.user_metadata?.name || 'doc'
-  const specialization = user?.user_metadata?.specialization || 'Physiotherapist'
-  const initial = doctorName.charAt(0).toUpperCase()
+  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
+  const initial = userName.charAt(0).toUpperCase()
 
-  const handleSignOut = async () => {
+  const navLinks = [
+    { label: 'Home', path: '/patient' },
+    { label: 'Doctors', path: '/patient/find-doctor' },
+    { label: 'AI Chat', path: '/patient/chat' },
+    { label: 'Profile', path: '/patient/profile' },
+  ]
+
+  const handleLogout = async () => {
     await supabase.auth.signOut()
     navigate('/login')
   }
@@ -30,14 +36,6 @@ export default function DoctorHeader({ requestCount = 0 }) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isMenuOpen])
-
-  const navLinks = [
-    { label: 'My Patients', path: '/doctor' },
-    { label: 'Exercises', path: '/doctor' },
-    { label: 'Sessions', path: '/doctor' },
-    { label: 'Requests', path: '/doctor', showBadge: true },
-    { label: 'Profile', path: '/doctor/profile' },
-  ]
 
   return (
     <>
@@ -133,8 +131,6 @@ export default function DoctorHeader({ requestCount = 0 }) {
           background: none;
           border: none;
           cursor: pointer;
-          display: flex;
-          align-items: center;
         }
 
         .nav-links button:hover {
@@ -147,27 +143,13 @@ export default function DoctorHeader({ requestCount = 0 }) {
           font-weight: 600;
         }
 
-        .badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 16px;
-          height: 16px;
-          background: #ff3b30;
-          color: #fff;
-          font-size: 10px;
-          font-weight: 700;
-          border-radius: 50%;
-          margin-left: 5px;
-        }
-
         .nav-right {
           display: flex;
           align-items: center;
           gap: 10px;
         }
 
-        .doctor-pill {
+        .user-pill {
           display: flex;
           align-items: center;
           gap: 8px;
@@ -178,13 +160,13 @@ export default function DoctorHeader({ requestCount = 0 }) {
           transition: background 0.15s;
         }
 
-        .doctor-pill:hover { background: rgba(0,0,0,0.07); }
+        .user-pill:hover { background: rgba(0,0,0,0.07); }
 
         .avatar {
           width: 26px;
           height: 26px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #0071e3, #5856d6);
+          background: linear-gradient(135deg, #34c759, #0071e3);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -194,21 +176,10 @@ export default function DoctorHeader({ requestCount = 0 }) {
           flex-shrink: 0;
         }
 
-        .doctor-info {
-          display: flex;
-          flex-direction: column;
-          line-height: 1.1;
-        }
-
-        .doctor-name {
+        .user-name {
           font-size: 13px;
           font-weight: 600;
           color: #1d1d1f;
-        }
-
-        .doctor-role {
-          font-size: 10px;
-          color: #6e6e73;
         }
 
         .logout-btn {
@@ -294,14 +265,11 @@ export default function DoctorHeader({ requestCount = 0 }) {
           padding: 11px 16px;
           border-radius: 12px;
           transition: background 0.15s;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
           background: none;
           border: none;
           cursor: pointer;
-          width: 100%;
           text-align: left;
+          width: 100%;
         }
 
         .mobile-menu button:hover { background: rgba(0,0,0,0.05); }
@@ -341,14 +309,14 @@ export default function DoctorHeader({ requestCount = 0 }) {
         @media (max-width: 768px) {
           .nav-links { display: none; }
           .logout-btn { display: none; }
-          .doctor-pill { display: none; }
+          .user-pill { display: none; }
           .burger { display: flex; }
         }
       `}</style>
 
       <div className="nav-outer">
         <nav>
-          <button className="brand" onClick={() => navigate('/doctor')}>
+          <button className="brand" onClick={() => navigate('/patient')}>
             <div className="brand-logo">
               <svg width="22" height="22" viewBox="0 0 750 750" xmlns="http://www.w3.org/2000/svg">
                 <path fill="#ffffff" d="m208.00003,254.6l3.6,-0.6c-20.9,9.9 -49,30.4 -67.8,44.9c-30.4,23.3 -54.1,57.9 -74,92.9c84.1,-45.7 161.8,-52.4 178.5,-48.2c0.2,0.1 -7.7,45.5 -36.7,83.6c-30.5,39.9 -82.2,72.4 -82.2,72.4c18.9,2.2 37.9,2.6 56.7,0.8c32.2,-3 65.3,-12.4 91.5,-34.7c11.6,-9.9 32.8,-39 30.5,-34.8c-12.5,31.2 -14.3,66.7 -12.3,100.6c1.1,19.9 3.2,39.6 9.1,58.4c5,16.1 12.3,31.2 20.6,45.3l8.2,6.5c0.1,-0.7 -7.9,-111.8 48.5,-166.7c102.6,-99.8 216,-4.9 216,-4.9s-4.5,-75.2 -89.6,-111.7c203.8,-18.8 159.7,102 159.7,102s69.8,-29.8 59.1,-114.9c-9.7,-77 -85,-95.3 -100.7,-98.3c-13.2,-21.7 -113.2,-186.8 -279.8,-121.9c-180.6,70.3 -326.9,53.6 -326.9,53.6c21.5,24.7 46.7,44.6 74.1,58.7c35.6,18.4 75.3,23.8 113.9,17zm314,-15.9c6.3,2.1 12.7,4.2 19.1,6.2c-0.5,6.1 -4.8,10.9 -10,10.9c-5.5,0 -10.1,-5.4 -10.1,-12.1c0.1,-1.8 0.4,-3.5 1,-5zm-40.1,2.4c0,-5.1 0.9,-9.9 2.6,-14.4c3.8,0.9 7.6,1.8 11.2,3c3.8,1.2 7.5,2.5 11.3,3.8c-1.1,3.1 -1.8,6.5 -1.8,10.1c0,15.4 11.6,27.9 25.9,27.9c12.6,0 23,-9.7 25.4,-22.5c2.7,0.6 5.3,1.3 8,1.8c-4.4,18.5 -20.9,32.3 -40.7,32.3c-23.2,0 -41.9,-18.8 -41.9,-42z"/>
@@ -356,14 +324,14 @@ export default function DoctorHeader({ requestCount = 0 }) {
             </div>
             <div className="brand-text">
               <span className="brand-name">Phoenix-AI</span>
-              <span className="brand-sub">Doctor workspace</span>
+              <span className="brand-sub">Patient workspace</span>
             </div>
           </button>
 
           <div className="nav-links">
             {navLinks.map(link => (
               <button
-                key={link.label}
+                key={link.path}
                 className={location.pathname === link.path ? 'active' : ''}
                 onClick={() => {
                   navigate(link.path)
@@ -371,20 +339,16 @@ export default function DoctorHeader({ requestCount = 0 }) {
                 }}
               >
                 {link.label}
-                {link.showBadge && requestCount > 0 && <span className="badge">{requestCount}</span>}
               </button>
             ))}
           </div>
 
           <div className="nav-right">
-            <div className="doctor-pill" onClick={() => navigate('/doctor/profile')}>
+            <div className="user-pill" onClick={() => navigate('/patient/profile')}>
               <div className="avatar">{initial}</div>
-              <div className="doctor-info">
-                <span className="doctor-name">{doctorName}</span>
-                <span className="doctor-role">{specialization}</span>
-              </div>
+              <span className="user-name">{userName}</span>
             </div>
-            <button className="logout-btn" onClick={handleSignOut}>Sign out</button>
+            <button className="logout-btn" onClick={handleLogout}>Log out</button>
           </div>
 
           <button
@@ -401,27 +365,23 @@ export default function DoctorHeader({ requestCount = 0 }) {
       <div className={`mobile-menu ${isMenuOpen ? 'open' : ''}`}>
         {navLinks.map(link => (
           <button
-            key={link.label}
+            key={link.path}
             className={location.pathname === link.path ? 'active' : ''}
             onClick={() => {
               navigate(link.path)
               setIsMenuOpen(false)
             }}
           >
-            <span>{link.label}</span>
-            {link.showBadge && requestCount > 0 && <span className="badge">{requestCount}</span>}
+            {link.label}
           </button>
         ))}
         <div className="mobile-divider"></div>
         <div className="mobile-user-row">
           <div className="mobile-user-info">
             <div className="avatar">{initial}</div>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>{doctorName}</div>
-              <div style={{ fontSize: '11px', color: '#6e6e73' }}>{specialization}</div>
-            </div>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f' }}>{userName}</span>
           </div>
-          <button className="mobile-logout" onClick={handleSignOut}>Sign out</button>
+          <button className="mobile-logout" onClick={handleLogout}>Log out</button>
         </div>
       </div>
     </>

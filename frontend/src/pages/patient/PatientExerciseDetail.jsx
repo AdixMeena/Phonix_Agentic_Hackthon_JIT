@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 import { Card, BtnPrimary, BtnOutline } from '../../components/UI.jsx'
 import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
 import { supabase } from '../../lib/supabase.js'
@@ -62,24 +63,10 @@ export default function PatientExerciseDetail() {
   return (
     <PatientApprovalGate showNav>
       <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 100, fontFamily: '"Inter", sans-serif' }}>
+        <PatientHeader />
 
-        {/* Sticky header — same pattern as DoctorHeader */}
-        <header style={{
-          position: 'sticky', top: 0, zIndex: 20,
-          background: '#ffffff',
-          borderBottom: '1px solid #e5e5ea',
-        }}>
-          <div style={{ maxWidth: 1200, margin: '0 auto', padding: '16px 24px' }}>
-            <button
-              onClick={() => navigate('/patient')}
-              style={{
-                background: 'none', border: 'none', color: '#0071e3',
-                fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 12,
-                display: 'block',
-              }}
-            >
-              ← Back
-            </button>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+          <div style={{ marginBottom: 32 }}>
             <div style={{
               fontSize: 12, color: '#6e6e73', fontWeight: 600,
               marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1,
@@ -96,9 +83,6 @@ export default function PatientExerciseDetail() {
               {exercise.duration} · {exercise.difficulty}
             </p>
           </div>
-        </header>
-
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
 
           {/* Video placeholder */}
           <div style={{

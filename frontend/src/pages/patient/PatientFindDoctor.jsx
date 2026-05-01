@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { AuthContext } from '../../App.jsx'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 import { Card } from '../../components/UI.jsx'
 
 export default function PatientFindDoctor() {
@@ -106,25 +107,7 @@ export default function PatientFindDoctor() {
 
   return (
     <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 88 }}>
-
-      {/* Sticky header */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 20,
-        background: '#ffffff',
-        borderBottom: '1px solid #e5e5ea',
-      }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '16px 24px' }}>
-          <button
-            onClick={() => navigate('/patient')}
-            style={{
-              background: 'none', border: 'none', color: '#0071e3',
-              fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 0,
-            }}
-          >
-            ← Back
-          </button>
-        </div>
-      </header>
+      <PatientHeader />
 
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
 

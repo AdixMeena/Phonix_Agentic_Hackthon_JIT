@@ -1,6 +1,7 @@
 // src/pages/patient/PatientHealthChat.jsx
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -245,62 +246,21 @@ export default function PatientHealthChat() {
       fontFamily: '"Inter", sans-serif',
       position: 'relative',
     }}>
+      <PatientHeader />
 
-      {/* ── Header ── */}
+      {/* Disclaimer strip */}
       <div style={{
-        background: '#fff',
-        borderBottom: '1px solid #d2d2d7',
-        padding: '52px 24px 0',
+        background: '#fff8e6', borderBottom: '1px solid #ff9f0a20',
+        padding: '10px 24px',
+        display: 'flex', alignItems: 'center', gap: 10,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* AI Avatar */}
-            <div style={{
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #0071e3, #34c759)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-            </div>
-            <div>
-              <h1 style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', margin: 0, fontFamily: '"Inter Tight", sans-serif' }}>
-                Phoenix Health AI
-              </h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34c759', animation: 'pulse 2s ease-in-out infinite' }} />
-                <span style={{ fontSize: 11, color: '#34c759', fontWeight: 600 }}>Online</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Clear button — only show when there are messages */}
-          {hasMessages && (
-            <button onClick={clearChat} style={{
-              background: 'none', border: '1px solid #d2d2d7',
-              borderRadius: 980, padding: '5px 14px',
-              fontSize: 12, fontWeight: 600, color: '#6e6e73',
-              cursor: 'pointer',
-            }}>Clear</button>
-          )}
-        </div>
-
-        {/* Disclaimer strip */}
-        <div style={{
-          background: '#fff8e6', borderRadius: 10,
-          padding: '8px 12px', marginBottom: 12,
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <p style={{ fontSize: 11, color: '#86868b', lineHeight: 1.4, margin: 0 }}>
-            For general guidance only. Always consult your doctor for diagnosis and treatment decisions.
-          </p>
-        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" strokeWidth="2.5" strokeLinecap="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p style={{ fontSize: 11, color: '#86868b', margin: 0, fontWeight: 500 }}>
+          Phoenix Health AI: Always consult your doctor for medical decisions.
+        </p>
       </div>
 
       {/* ── Messages area ── */}

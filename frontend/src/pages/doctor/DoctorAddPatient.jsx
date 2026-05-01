@@ -154,12 +154,6 @@ export default function DoctorAddPatient() {
     <div style={{ minHeight: '100vh', background: '#f5f5f7', paddingBottom: 88 }}>
       <DoctorHeader />
       <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 48px' }}>
-        <button onClick={() => navigate('/doctor')} style={{
-          background: 'none', border: 'none', color: '#0071e3',
-          fontSize: 14, cursor: 'pointer', marginBottom: 24, padding: 0,
-        }}>
-          ← Back to patients
-        </button>
 
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>

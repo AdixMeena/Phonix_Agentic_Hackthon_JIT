@@ -177,7 +177,7 @@ export default function DoctorDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f7', paddingBottom: 88 }}>
-      <DoctorHeader />
+      <DoctorHeader requestCount={requests.length} />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px 48px', minHeight: '100vh' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>

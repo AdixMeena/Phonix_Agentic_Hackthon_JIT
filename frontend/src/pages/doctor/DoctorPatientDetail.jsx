@@ -216,15 +216,6 @@ export default function DoctorPatientDetail() {
           </div>
         )}
 
-        {/* Back */}
-        <button onClick={() => navigate('/doctor')} style={{
-          background: 'none', border: 'none', color: '#0071e3',
-          fontSize: 14, cursor: 'pointer', marginBottom: 24, padding: 0,
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          ← Back to patients
-        </button>
-
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',

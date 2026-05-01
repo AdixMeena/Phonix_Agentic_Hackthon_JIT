@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PatientBottomNav from '../../components/PatientBottomNav.jsx'
+import PatientHeader from '../../components/PatientHeader.jsx'
 import { Card, StatusBadge, ScoreBadge } from '../../components/UI.jsx'
 import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
 import { supabase } from '../../lib/supabase.js'
@@ -120,68 +121,7 @@ export default function PatientDashboard() {
   return (
     <PatientApprovalGate showNav>
       <div style={{ background: '#f5f5f7', minHeight: '100vh', paddingBottom: 88, fontFamily: '"Inter", sans-serif' }}>
-
-        {/* Header — mirrors DoctorHeader layout */}
-        <header style={{
-          position: 'sticky', top: 0, zIndex: 20,
-          background: '#ffffff',
-          borderBottom: '1px solid #e5e5ea',
-        }}>
-          <div style={{
-            maxWidth: 1200, margin: '0 auto',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '16px 24px',
-          }}>
-            {/* Left: branding */}
-            <button
-              onClick={() => navigate('/patient')}
-              style={{
-                background: 'none', border: 'none', padding: 0,
-                color: '#1d1d1f', cursor: 'pointer', textAlign: 'left',
-              }}
-            >
-              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: '"Inter Tight", sans-serif' }}>
-                Phoenix-AI
-              </div>
-              <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 2 }}>
-                Patient workspace
-              </div>
-            </button>
-
-            {/* Right: score badge + streak + log out */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <ScoreBadge score={patient?.score ?? 0} size={40} />
-                <div>
-                  <div style={{ fontSize: 12, color: '#6e6e73' }}>Overall score</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>
-                    {(patient?.score ?? 0) >= 75 ? 'Great progress' : (patient?.score ?? 0) >= 50 ? 'Keep going' : 'Needs work'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ width: 1, height: 34, background: '#e5e5ea' }} />
-              <div>
-                <div style={{ fontSize: 12, color: '#6e6e73' }}>Streak</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#34c759' }}>{patient?.streak ?? 0} days 🔥</div>
-              </div>
-              <button
-                onClick={async () => {
-                  await supabase.auth.signOut()
-                  navigate('/login')
-                }}
-                style={{
-                  fontSize: 12, color: '#6e6e73',
-                  background: 'none', border: '1px solid #d2d2d7',
-                  borderRadius: 10, padding: '6px 10px', cursor: 'pointer',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = '#ff3b30'}
-                onMouseLeave={e => e.currentTarget.style.color = '#6e6e73'}
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-        </header>
+        <PatientHeader />
 
         <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px 48px' }}>
 

@@ -189,12 +189,7 @@ export default function DoctorAssignExercise() {
           </div>
         )}
 
-        <button onClick={() => navigate(`/doctor/patient/${id}`)} style={{
-          background: 'none', border: 'none', color: '#0071e3',
-          fontSize: 14, cursor: 'pointer', marginBottom: 24, padding: 0,
-        }}>
-          ← Back to {patient?.name}
-        </button>
+
 
         <div style={{ marginBottom: 32 }}>
           <h1 style={{ fontSize: 32, fontWeight: 600, color: '#1d1d1f', fontFamily: '"Inter Tight", sans-serif', margin: 0 }}>
