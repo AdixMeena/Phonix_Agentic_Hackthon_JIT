@@ -11,7 +11,7 @@ const POSE_CONNECTIONS = [
   [27, 29], [28, 30], [29, 31], [30, 32],
 ]
 
-// ── Voice helper ─────────────────────
+// ── Voice helper ───────────────────────────
 // lang: 'en-US' for English, 'ur-PK' for Urdu
 function speak(text, { rate = 0.95, pitch = 1.0, volume = 1.0, lang = 'en-US' } = {}) {
   if (!window.speechSynthesis || !text) return
