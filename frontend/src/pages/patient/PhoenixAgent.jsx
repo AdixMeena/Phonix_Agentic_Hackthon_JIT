@@ -55,7 +55,7 @@ function TypingDots() {
         <div key={i} style={{
           width: 7, height: 7, borderRadius: '50%',
           background: '#0071e3',
-          animation: `agentDot 1.3s ease-in-out \${i * 0.18}s infinite`,
+          animation: `agentDot 1.3s ease-in-out ${i * 0.18}s infinite`,
         }} />
       ))}
     </div>
@@ -108,7 +108,7 @@ function ExerciseCard({ exercise, isAdded, onAdd, onView, compact = false }) {
           fontSize: 11, fontWeight: 600,
           color: diffStyle.color,
           background: diffStyle.bg,
-          border: `1px solid \${diffStyle.border}`,
+          border: `1px solid ${diffStyle.border}`,
           borderRadius: 6, padding: '3px 8px',
         }}>
           {diff.charAt(0).toUpperCase() + diff.slice(1)}
@@ -391,16 +391,16 @@ export default function PhoenixAgent() {
     setSuggestions([])
 
     const exerciseList = allExercises.map(ex =>
-      `- "\${ex.name}" (category: \${ex.category || 'general'}, difficulty: \${ex.difficulty || 'moderate'}, duration: \${ex.duration || 'N/A'})`
+      `- "${ex.name}" (category: ${ex.category || 'general'}, difficulty: ${ex.difficulty || 'moderate'}, duration: ${ex.duration || 'N/A'})`
     ).join('\n')
 
     const prompt = `You are a professional physiotherapist AI inside the Phoenix-AI rehabilitation app. A patient needs personalized exercise recommendations.
 
-Patient's injury area: \${injuryCategory || 'Not specified'}
-Patient's description: \${injuryDesc.trim() || 'No additional description provided'}
+Patient's injury area: ${injuryCategory || 'Not specified'}
+Patient's description: ${injuryDesc.trim() || 'No additional description provided'}
 
 Available exercises in our library:
-\${exerciseList}
+${exerciseList}
 
 Your task:
 - Recommend 4 to 6 exercises from the list above that are MOST suitable for this patient's condition
@@ -427,7 +427,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer \${GROQ_API_KEY}`,
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
         },
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
@@ -437,11 +437,11 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
         }),
       })
 
-      if (!response.ok) throw new Error(`HTTP \${response.status}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const data = await response.json()
       const raw = data.choices?.[0]?.message?.content || ''
-      const clean = raw.replace(/\\\`\\\`\\\`json|\\\`\\\`\\\`/g, '').trim()
+      const clean = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(clean)
 
       setSuggestions(parsed.suggestions || [])
@@ -615,7 +615,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
                       fontFamily: '"Inter", sans-serif',
                       cursor: 'pointer',
                       appearance: 'none',
-                      backgroundImage: \`url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")\`,
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")`,
                       backgroundRepeat: 'no-repeat',
                       backgroundPosition: 'right 14px center',
                       paddingRight: 36,
@@ -644,7 +644,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
                       width: '100%', padding: '12px 16px',
                       fontSize: 14, color: '#1d1d1f', lineHeight: 1.6,
                       background: '#f5f5f7',
-                      border: \`1.5px solid \${descFocused ? '#0071e3' : '#d2d2d7'}\`,
+                      border: `1.5px solid ${descFocused ? '#0071e3' : '#d2d2d7'}`,
                       borderRadius: 12, outline: 'none', resize: 'vertical',
                       fontFamily: '"Inter", sans-serif',
                       transition: 'border-color 0.15s',
@@ -759,7 +759,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
                           matchedExercise={matched}
                           isAdded={matched ? myExerciseIds.has(matched.id) : false}
                           onAdd={addExercise}
-                          onView={ex => navigate(\`/patient/exercise/\${ex.id}\`)}
+                          onView={ex => navigate(`/patient/exercise/${ex.id}`)}
                         />
                       )
                     })}
@@ -822,7 +822,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
                     flex: '1 1 240px', padding: '10px 16px',
                     fontSize: 14, color: '#1d1d1f',
                     background: '#fff',
-                    border: \`1.5px solid \${searchFocused ? '#0071e3' : '#d2d2d7'}\`,
+                    border: `1.5px solid ${searchFocused ? '#0071e3' : '#d2d2d7'}`,
                     borderRadius: 12, outline: 'none',
                     fontFamily: '"Inter", sans-serif',
                     transition: 'border-color 0.15s',
@@ -911,7 +911,7 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
                     exercise={ex}
                     isAdded={myExerciseIds.has(ex.id)}
                     onAdd={addExercise}
-                    onView={ex => navigate(\`/patient/exercise/\${ex.id}\`)}
+                    onView={ex => navigate(`/patient/exercise/${ex.id}`)}
                   />
                 ))}
               </div>
@@ -921,12 +921,12 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 
         <PatientBottomNav />
 
-        <style>{\`
+        <style>{`
           @keyframes agentDot {
             0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
             30% { transform: translateY(-5px); opacity: 1; }
           }
-        \`}</style>
+        `}</style>
       </div>
     </PatientApprovalGate>
   )
