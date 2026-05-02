@@ -11,48 +11,49 @@ const POSE_CONNECTIONS = [
   [27, 29], [28, 30], [29, 31], [30, 32],
 ]
 
-// ── Voice helper ──────────────────────────────────────────────────────────────
+// ── Voice helper ─────────────────────────────────────
 // lang: 'en-US' for English, 'ur-PK' for Urdu
 function speak(text, { rate = 0.95, pitch = 1.0, volume = 1.0, lang = 'en-US' } = {}) {
   if (!window.speechSynthesis || !text) return
   window.speechSynthesis.cancel()
-  const utterance    = new SpeechSynthesisUtterance(text)
-  utterance.rate     = rate
-  utterance.pitch    = pitch
-  utterance.volume   = volume
-  utterance.lang     = lang
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.rate = rate
+  utterance.pitch = pitch
+  utterance.volume = volume
+  utterance.lang = lang
   window.speechSynthesis.speak(utterance)
 }
 
 export default function PatientCameraSession() {
-  const { id }   = useParams()
+  const { id } = useParams()
   const navigate = useNavigate()
 
   const [exerciseName, setExerciseName] = useState('Exercise')
-  const [feedback,     setFeedback]     = useState('Initializing...')
-  const [landmarks,    setLandmarks]    = useState([])
-  const [reps,         setReps]         = useState(0)
-  const [score,        setScore]        = useState(0)
-  const [timer,        setTimer]        = useState(0)
-  const [analyzing,    setAnalyzing]    = useState(false)
+  const [feedback, setFeedback] = useState('Initializing...')
+  const [landmarks, setLandmarks] = useState([])
+  const [reps, setReps] = useState(0)
+  const [score, setScore] = useState(0)
+  const [timer, setTimer] = useState(0)
+  const [analyzing, setAnalyzing] = useState(false)
   const [analyzingMsg, setAnalyzingMsg] = useState('')
 
   // ── NEW: language toggle state — 'en' = English, 'ur' = Urdu ─────────────
   const [voiceLang, setVoiceLang] = useState('en')
 
-  const videoRef         = useRef(null)
-  const overlayRef       = useRef(null)
-  const captureRef       = useRef(null)
-  const wsRef            = useRef(null)
-  const sendTimerRef     = useRef(null)
-  const sessionIdRef     = useRef(`${Date.now()}`)
-  const jointScoresRef   = useRef({})
-  const scoreRef         = useRef(0)
-  const repsRef          = useRef(0)
-  const timerRef         = useRef(0)
-  const lastFeedbackRef  = useRef('')
+
+  const videoRef = useRef(null)
+  const overlayRef = useRef(null)
+  const captureRef = useRef(null)
+  const wsRef = useRef(null)
+  const sendTimerRef = useRef(null)
+  const sessionIdRef = useRef(`${Date.now()}`)
+  const jointScoresRef = useRef({})
+  const scoreRef = useRef(0)
+  const repsRef = useRef(0)
+  const timerRef = useRef(0)
+  const lastFeedbackRef = useRef('')
   const feedbackTimerRef = useRef(null)
-  const voiceIntroSaid   = useRef(false)
+  const voiceIntroSaid = useRef(false)
 
   // Keep voiceLang accessible inside WS callback without re-registering the effect
   const voiceLangRef = useRef(voiceLang)
@@ -60,7 +61,7 @@ export default function PatientCameraSession() {
 
   // Keep score/reps/timer refs in sync
   useEffect(() => { scoreRef.current = score }, [score])
-  useEffect(() => { repsRef.current  = reps  }, [reps])
+  useEffect(() => { repsRef.current = reps }, [reps])
   useEffect(() => { timerRef.current = timer }, [timer])
 
   // Load exercise name
@@ -117,16 +118,16 @@ export default function PatientCameraSession() {
   // If those keys are absent, English text is used as fallback for Urdu mode too.
   useEffect(() => {
     const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
-    const ws     = new WebSocket(`${wsBase}/ws/session/${sessionIdRef.current}?exercise_id=${id}`)
+    const ws = new WebSocket(`${wsBase}/ws/session/${sessionIdRef.current}?exercise_id=${id}`)
     wsRef.current = ws
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
         const lang = voiceLangRef.current               // 'en' or 'ur'
-        const bcp  = lang === 'ur' ? 'ur-PK' : 'en-US' // BCP-47 for speechSynthesis
+        const bcp = lang === 'ur' ? 'ur-PK' : 'en-US' // BCP-47 for speechSynthesis
 
-        if (Array.isArray(data.landmarks))          setLandmarks(data.landmarks)
+        if (Array.isArray(data.landmarks)) setLandmarks(data.landmarks)
         if (typeof data.session_score === 'number') setScore(data.session_score)
 
         if (data.rep_counted) {
@@ -165,7 +166,7 @@ export default function PatientCameraSession() {
 
           setFeedback(feedbackText)
 
-          const isNew   = feedbackText !== lastFeedbackRef.current
+          const isNew = feedbackText !== lastFeedbackRef.current
           const noTimer = !feedbackTimerRef.current
 
           if (isNew && noTimer) {
@@ -195,18 +196,18 @@ export default function PatientCameraSession() {
   // Frame capture loop
   useEffect(() => {
     const capture = () => {
-      const video  = videoRef.current
+      const video = videoRef.current
       const canvas = captureRef.current
-      const ws     = wsRef.current
+      const ws = wsRef.current
       if (!video || !canvas || !ws || ws.readyState !== WebSocket.OPEN) return
       if (video.videoWidth === 0 || video.videoHeight === 0) return
 
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width  = video.videoWidth
+        canvas.width = video.videoWidth
         canvas.height = video.videoHeight
       }
 
-      const ctx  = canvas.getContext('2d')
+      const ctx = canvas.getContext('2d')
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
       const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1]
       ws.send(JSON.stringify({ frame: base64 }))
@@ -219,21 +220,21 @@ export default function PatientCameraSession() {
   // Skeleton overlay
   useEffect(() => {
     const canvas = overlayRef.current
-    const video  = videoRef.current
+    const video = videoRef.current
     if (!canvas || !video) return
 
-    const ctx    = canvas.getContext('2d')
-    const width  = video.videoWidth  || canvas.width
+    const ctx = canvas.getContext('2d')
+    const width = video.videoWidth || canvas.width
     const height = video.videoHeight || canvas.height
-    canvas.width  = width
+    canvas.width = width
     canvas.height = height
     ctx.clearRect(0, 0, width, height)
 
     if (!landmarks.length) return
 
     ctx.strokeStyle = '#0071e3'
-    ctx.lineWidth   = 3
-    ctx.lineCap     = 'round'
+    ctx.lineWidth = 3
+    ctx.lineCap = 'round'
     POSE_CONNECTIONS.forEach(([a, b]) => {
       const p1 = landmarks[a]
       const p2 = landmarks[b]
@@ -267,19 +268,19 @@ export default function PatientCameraSession() {
       feedbackTimerRef.current = null
     }
     lastFeedbackRef.current = ''   // force next feedback to be spoken fresh
-    voiceIntroSaid.current  = false // allow intro to re-fire in new language
+    voiceIntroSaid.current = false // allow intro to re-fire in new language
     setVoiceLang(prev => prev === 'en' ? 'ur' : 'en')
   }
 
   // ── Stop handler ──────────────────────────────────────────────────────────
   async function handleStop() {
-    if (wsRef.current)            wsRef.current.close()
+    if (wsRef.current) wsRef.current.close()
     clearInterval(sendTimerRef.current)
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
     window.speechSynthesis?.cancel()
 
-    const lang    = voiceLangRef.current
-    const bcp     = lang === 'ur' ? 'ur-PK' : 'en-US'
+    const lang = voiceLangRef.current
+    const bcp = lang === 'ur' ? 'ur-PK' : 'en-US'
     const doneMsg = lang === 'ur'
       ? 'سیشن مکمل ہو گیا۔ آپ کی کارکردگی کا تجزیہ ہو رہا ہے۔'
       : 'Session complete. Analyzing your performance.'
@@ -287,13 +288,13 @@ export default function PatientCameraSession() {
 
     setAnalyzing(true)
 
-    const finalScore    = scoreRef.current
-    const finalReps     = repsRef.current
+    const finalScore = scoreRef.current
+    const finalReps = repsRef.current
     const finalDuration = timerRef.current
 
     const jointScoresArray = Object.entries(jointScoresRef.current).map(([name, sc]) => ({
       name,
-      score:  typeof sc === 'number' ? sc : 0,
+      score: typeof sc === 'number' ? sc : 0,
       status: typeof sc === 'number' && sc >= 70 ? 'good' : 'warning',
     }))
 
@@ -308,20 +309,20 @@ export default function PatientCameraSession() {
     setAnalyzingMsg('Saving session...')
     let sessionId = null
     try {
-      const res  = await fetch(`${apiBase}/session`, {
-        method:  'POST',
+      const res = await fetch(`${apiBase}/session`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          patient_id:   patientId,
-          exercise_id:  Number(id),
-          score:        Math.round(finalScore),
-          reps:         finalReps,
-          duration:     finalDuration,
+          patient_id: patientId,
+          exercise_id: Number(id),
+          score: Math.round(finalScore),
+          reps: finalReps,
+          duration: finalDuration,
           joint_scores: jointScoresArray,
         }),
       })
       const saved = await res.json()
-      sessionId   = saved.session_id || null
+      sessionId = saved.session_id || null
     } catch { /* continue */ }
 
     setAnalyzingMsg('Analyzing your performance...')
@@ -329,11 +330,11 @@ export default function PatientCameraSession() {
     if (sessionId) {
       try {
         const res = await fetch(`${apiBase}/analyze`, {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            session_id:  sessionId,
-            patient_id:  patientId,
+            session_id: sessionId,
+            patient_id: patientId,
             exercise_id: Number(id),
           }),
         })
@@ -343,10 +344,10 @@ export default function PatientCameraSession() {
 
     navigate('/patient/score', {
       state: {
-        exerciseId:  id,
-        reps:        finalReps,
-        score:       Math.round(finalScore),
-        duration:    finalDuration,
+        exerciseId: id,
+        reps: finalReps,
+        score: Math.round(finalScore),
+        duration: finalDuration,
         jointScores: jointScoresArray,
         analysis,
       },
@@ -390,11 +391,11 @@ export default function PatientCameraSession() {
         />
         <canvas
           ref={overlayRef}
-          style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            width: '100%', 
-            height: '100%', 
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
             objectFit: 'cover',
             zIndex: 5,
             pointerEvents: 'none'
@@ -437,7 +438,7 @@ export default function PatientCameraSession() {
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
               background: voiceLang === 'en' ? '#0071e3' : 'transparent',
-              color:      voiceLang === 'en' ? '#fff'    : '#6e6e73',
+              color: voiceLang === 'en' ? '#fff' : '#6e6e73',
               transition: 'background 0.2s, color 0.2s',
             }}>
               EN
@@ -446,7 +447,7 @@ export default function PatientCameraSession() {
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
               background: voiceLang === 'ur' ? '#0071e3' : 'transparent',
-              color:      voiceLang === 'ur' ? '#fff'    : '#6e6e73',
+              color: voiceLang === 'ur' ? '#fff' : '#6e6e73',
               transition: 'background 0.2s, color 0.2s',
             }}>
               اردو
@@ -454,11 +455,11 @@ export default function PatientCameraSession() {
           </button>
           {/* Small mic icon to hint it's about voice */}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-               stroke="#6e6e73" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8"  y1="23" x2="16" y2="23"/>
+            stroke="#6e6e73" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
           </svg>
         </div>
 
@@ -515,7 +516,7 @@ export default function PatientCameraSession() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseDown={e => e.currentTarget.style.transform = 'scale(0.93)'}
-            onMouseUp={e =>   e.currentTarget.style.transform = 'scale(1)'}
+            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
           >
             <div style={{ width: 16, height: 16, background: '#fff', borderRadius: 3 }} />
           </button>
