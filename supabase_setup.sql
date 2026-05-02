@@ -161,6 +161,7 @@ create table if not exists public.exercises (
   target_angle_max int,                       -- numeric max for agent
   joints           text[]  default '{}',
   common_mistakes  text[]  default '{}',      -- agent reads these for mistake analysis
+  video_url        text,                      -- path to real demo video
   created_at       timestamptz default now()
 );
 

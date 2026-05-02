@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
-# Install system dependencies that MediaPipe and OpenCV need
+# Install system dependencies for MediaPipe and OpenCV
 RUN apt-get update && apt-get install -y \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
@@ -11,14 +11,20 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libusb-1.0-0 \
     libfontconfig1 \
+    mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Upgrade pip and install requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Use workers 1 and avoid uvloop if it's causing stability issues
-CMD uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --loop asyncio --no-access-log
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Start command (Railway will override this if railway.toml is used)
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1

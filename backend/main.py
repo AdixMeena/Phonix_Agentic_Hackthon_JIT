@@ -227,6 +227,11 @@ def health():
     }
 
 
+@app.get("/")
+def root():
+    return {"message": "Phoenix-AI Backend is running", "version": "2.1.1"}
+
+
 @app.websocket("/ws/session/{session_id}")
 async def session_ws(websocket: WebSocket, session_id: str):
     await websocket.accept()
@@ -249,7 +254,7 @@ async def session_ws(websocket: WebSocket, session_id: str):
         mp_pose = mp.solutions.pose
         pose    = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
+            model_complexity=0,
             enable_segmentation=False,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,

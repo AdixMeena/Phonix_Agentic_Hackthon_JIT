@@ -84,39 +84,49 @@ export default function PatientExerciseDetail() {
             </p>
           </div>
 
-          {/* Video placeholder */}
-          <div style={{
-            width: '100%', aspectRatio: '16/9',
-            background: '#000', borderRadius: 12,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 28, position: 'relative', overflow: 'hidden',
-          }}>
-            <svg width="120" height="160" viewBox="0 0 120 160" fill="none" style={{ opacity: 0.3 }}>
-              <circle cx="60" cy="20" r="16" stroke="white" strokeWidth="2"/>
-              <line x1="60" y1="36" x2="60" y2="90" stroke="white" strokeWidth="2"/>
-              <line x1="60" y1="55" x2="30" y2="80" stroke="white" strokeWidth="2"/>
-              <line x1="60" y1="55" x2="90" y2="80" stroke="white" strokeWidth="2"/>
-              <line x1="60" y1="90" x2="40" y2="130" stroke="white" strokeWidth="2"/>
-              <line x1="60" y1="90" x2="80" y2="130" stroke="white" strokeWidth="2"/>
-              <circle cx="30" cy="80" r="4" fill="#34c759"/>
-              <circle cx="90" cy="80" r="4" fill="#34c759"/>
-              <circle cx="40" cy="130" r="4" fill="#ff9f0a"/>
-              <circle cx="80" cy="130" r="4" fill="#34c759"/>
-            </svg>
-            <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 8 }}>Demo preview</div>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: '50%',
-                background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '1px solid rgba(255,255,255,0.2)',
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
+          {/* Video / Demo */}
+          {exercise.video_url ? (
+            <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', marginBottom: 28, background: '#000' }}>
+              <video 
+                src={exercise.video_url} 
+                controls 
+                style={{ width: '100%', display: 'block' }}
+              />
+            </div>
+          ) : (
+            <div style={{
+              width: '100%', aspectRatio: '16/9',
+              background: '#000', borderRadius: 12,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 28, position: 'relative', overflow: 'hidden',
+            }}>
+              <svg width="120" height="160" viewBox="0 0 120 160" fill="none" style={{ opacity: 0.3 }}>
+                <circle cx="60" cy="20" r="16" stroke="white" strokeWidth="2"/>
+                <line x1="60" y1="36" x2="60" y2="90" stroke="white" strokeWidth="2"/>
+                <line x1="60" y1="55" x2="30" y2="80" stroke="white" strokeWidth="2"/>
+                <line x1="60" y1="55" x2="90" y2="80" stroke="white" strokeWidth="2"/>
+                <line x1="60" y1="90" x2="40" y2="130" stroke="white" strokeWidth="2"/>
+                <line x1="60" y1="90" x2="80" y2="130" stroke="white" strokeWidth="2"/>
+                <circle cx="30" cy="80" r="4" fill="#34c759"/>
+                <circle cx="90" cy="80" r="4" fill="#34c759"/>
+                <circle cx="40" cy="130" r="4" fill="#ff9f0a"/>
+                <circle cx="80" cy="130" r="4" fill="#34c759"/>
+              </svg>
+              <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 8 }}>Demo preview</div>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Instructions — wrapped in Card */}
           <Card style={{ marginBottom: 16 }}>
