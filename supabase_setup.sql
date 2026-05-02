@@ -187,6 +187,7 @@ create table if not exists public.patient_exercises (
   exercise_id int  not null references public.exercises(id) on delete cascade,
   status      text not null default 'pending' check (status in ('pending', 'completed', 'overdue')),
   assigned_at timestamptz default now(),
+  assigned_by text default 'doctor',
   unique (patient_id, exercise_id)
 );
 
@@ -462,3 +463,5 @@ on conflict (name) do update set
 --   3. Add GROQ_API_KEY to backend/.env
 --   4. Build analyze_session() endpoint in main.py
 -- =============================================================================
+
+ALTER TABLE public.patient_exercises ADD COLUMN IF NOT EXISTS assigned_by text DEFAULT 'doctor';

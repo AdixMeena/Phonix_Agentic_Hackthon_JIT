@@ -16,6 +16,7 @@ import PatientFeedback from './pages/patient/PatientFeedback.jsx'
 import PatientFindDoctor from './pages/patient/PatientFindDoctor.jsx'
 import PatientProfile from './pages/patient/PatientProfile.jsx'
 import PatientHealthChat from './pages/patient/PatientHealthChat.jsx'
+import PhoenixAgent from './pages/patient/PhoenixAgent.jsx'
 import VantaBg from './components/VantaBg'
 
 
@@ -174,6 +175,11 @@ export default function App() {
           <Route path="/patient/chat" element={
             <RequireAuth user={user} role={role} allowedRole="patient">
               <PatientHealthChat />
+            </RequireAuth>
+          } />
+          <Route path="/patient/agent" element={
+            <RequireAuth user={user} role={role} allowedRole="patient">
+              <PhoenixAgent />
             </RequireAuth>
           } />
 
