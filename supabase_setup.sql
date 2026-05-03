@@ -162,6 +162,7 @@ create table if not exists public.exercises (
   joints           text[]  default '{}',
   common_mistakes  text[]  default '{}',      -- agent reads these for mistake analysis
   video_url        text,                      -- path to real demo video
+  vision_model     text default 'general',    -- analyzer type: 'general', 'squats', 'lunges', etc.
   created_at       timestamptz default now()
 );
 
@@ -341,7 +342,7 @@ create policy "Backend can update analysis"
 -- =============================================================================
 insert into public.exercises
   (name, category, duration, difficulty, instructions,
-   target_angle, target_angle_min, target_angle_max, joints, common_mistakes)
+   target_angle, target_angle_min, target_angle_max, joints, common_mistakes, vision_model)
 values
 
 ('Knee flexion stretch', 'Knee', '3 sets × 12 reps', 'Moderate',
@@ -353,7 +354,7 @@ values
    'Moving too fast — no controlled hold at peak',
    'Leaning back instead of keeping spine upright',
    'Bouncing at end range instead of smooth movement'
- ]),
+ ], 'general'),
 
 ('Straight leg raise', 'Knee', '3 sets × 10 reps', 'Easy',
  'Lie on your back. Keep one leg straight and lift it to approximately 45°. Hold for 2 seconds at the top. Lower slowly. Keep your core engaged and lower back flat against the surface.',
@@ -364,7 +365,7 @@ values
    'Lower back arching off surface',
    'Dropping leg too fast on the way down',
    'Knee bending during the raise'
- ]),
+ ], 'general'),
 
 ('Terminal knee extension', 'Knee', '2 sets × 15 reps', 'Easy',
  'Stand with a resistance band looped behind your knee. Start with a slight bend in the knee. Contract your quad and straighten the knee fully. Hold 2 seconds and return slowly.',
@@ -375,7 +376,7 @@ values
    'Moving hip instead of isolating knee',
    'Going too fast without holding at full extension',
    'Leaning forward and losing upright posture'
- ]),
+ ], 'general'),
 
 ('Shoulder pendulum', 'Shoulder', '3 × 60 seconds', 'Easy',
  'Lean forward supporting yourself with the unaffected arm on a table. Let the affected arm hang freely. Use momentum from your body to create small circular movements. Do not actively swing — let gravity do the work.',
@@ -386,7 +387,7 @@ values
    'Tensing the shoulder during the movement',
    'Circles too large causing pain at end range',
    'Not leaning forward enough — gravity not assisting'
- ]),
+ ], 'general'),
 
 ('Shoulder blade squeeze', 'Shoulder', '3 sets × 10 reps', 'Moderate',
  'Sit or stand tall. Pull your shoulder blades together as if trying to hold a pencil between them. Hold for 5 seconds. Keep your shoulders down, away from your ears. Do not arch your lower back.',
@@ -397,7 +398,7 @@ values
    'Arching lower back to compensate',
    'Not holding the retraction for full 5 seconds',
    'Squeezing too fast without controlled movement'
- ]),
+ ], 'general'),
 
 ('Pelvic tilt', 'Lower Back', '3 sets × 20 reps', 'Easy',
  'Lie on your back with knees bent. Flatten your lower back against the floor by tightening your abdominal muscles. Hold 5 seconds. Breathe normally throughout — do not hold your breath.',
@@ -408,7 +409,7 @@ values
    'Holding breath instead of breathing normally',
    'Releasing too quickly before 5 second hold',
    'Using legs instead of abdominals to create tilt'
- ]),
+ ], 'general'),
 
 ('Cat-camel stretch', 'Lower Back', '2 sets × 10 reps', 'Easy',
  'Start on all fours. Arch your back upward toward the ceiling (cat). Then let it sag toward the floor (camel). Move slowly and smoothly between positions. Keep the movement in your spine, not your hips.',
@@ -419,7 +420,7 @@ values
    'Moving too fast between cat and camel positions',
    'Not reaching full arch or full sag at each end',
    'Head not following the spinal curve'
- ]),
+ ], 'general'),
 
 ('Wrist flexion and extension', 'Wrist', '3 sets × 15 reps', 'Easy',
  'Hold your arm extended in front of you, palm down. Bend your wrist downward, then upward. Move through the full pain-free range. Keep elbow straight throughout.',
@@ -430,7 +431,7 @@ values
    'Not reaching full range in both directions',
    'Moving too fast without control',
    'Wrist deviating sideways instead of pure flex/extend'
- ]),
+ ], 'general'),
 
 ('Grip strengthening', 'Wrist', '3 sets × 12 reps', 'Moderate',
  'Hold a soft stress ball or rolled towel. Squeeze firmly, hold 3 seconds, then fully release. Ensure complete relaxation between reps. Work within comfortable limits — mild discomfort is acceptable, sharp pain is not.',
@@ -441,12 +442,13 @@ values
    'Squeezing with fingers only instead of full hand',
    'Not holding squeeze for full 3 seconds',
    'Wrist bending during the grip'
- ])
+ ], 'general')
 
 on conflict (name) do update set
   target_angle_min = excluded.target_angle_min,
   target_angle_max = excluded.target_angle_max,
-  common_mistakes  = excluded.common_mistakes;
+  common_mistakes  = excluded.common_mistakes,
+  vision_model = excluded.vision_model;
 
 
 -- =============================================================================

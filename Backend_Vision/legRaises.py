@@ -1,6 +1,6 @@
 # slr_analyzer.py
 import cv2
-import mediapipe as mp
+# import mediapipe as mp  <-- lazy loaded in __init__
 import numpy as np
 from collections import defaultdict
 import logging
@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 class SLRExerciseAnalyzer:
     def __init__(self, exercise="straight_leg_raises_rehab", delay_seconds=3, target_reps = 8, fps=30):
-        # Initialize MediaPipe Pose
+        # Initialize MediaPipe Pose (lazy import)
+        import mediapipe as mp
         self.mp_pose = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
         self.pose = self.mp_pose.Pose()
@@ -48,6 +49,7 @@ class SLRExerciseAnalyzer:
 
         # Hip movement tracking
         self.initial_hip_y = None  # Baseline hip position
+        self.start_frame = 0  # Frame where recording started
 
     def calculate_angle(self, p1, p2, p3):
         """Calculate the angle between three points in degrees."""
@@ -148,6 +150,10 @@ class SLRExerciseAnalyzer:
         self.reps = 0
         self.leg_raised = False
         self.prev_affected_angle = None
+        self.initial_hip_y = None
+        self.is_above_30 = False
+        self.peak_leg_angle = 180
+        self.shallow_rep_detected = False
         self.report = {
             "good_form_frames": 0,
             "error_counts": {}
@@ -161,7 +167,15 @@ class SLRExerciseAnalyzer:
         error_text = ""
 
         if results.pose_landmarks:
-            self.mp_drawing.draw_landmarks(annotated_frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
+            landmark_style = self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1)
+            connection_style = self.mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2)
+            self.mp_drawing.draw_landmarks(
+                annotated_frame, 
+                results.pose_landmarks, 
+                self.mp_pose.POSE_CONNECTIONS,
+                landmark_style,
+                connection_style
+            )
             self.frame_count += 1
 
             # Display countdown during delay
@@ -207,14 +221,18 @@ class SLRExerciseAnalyzer:
         frame_base64 = self._encode_frame(annotated_frame)
         return {
             "type": "frame",
+            "frame": frame_base64,
             "data": frame_base64,
             "reps": self.reps,
+            "rep_count": self.reps,
             "target_reps": self.target_reps,
             "good_form_frames": self.report["good_form_frames"],
             "error_counts": self.report["error_counts"],
             "recording": self.recording,
             "frame_count": self.frame_count - self.start_frame if self.recording else 0,
-            "error_text": error_text
+            "feedback": error_text,
+            "error_text": error_text,
+            "confidence": 0.85 if results.pose_landmarks else 0.0
         }
 
     def _encode_frame(self, frame):
@@ -224,13 +242,13 @@ class SLRExerciseAnalyzer:
 
     def generate_report(self):
         """Generate and print an exercise report."""
-        total_recorded_frames = self.frame_count - self.start_frame  # Frames from start of correction
+        total_recorded_frames = max(1, self.frame_count - self.start_frame)
         good_form_seconds = self.report["good_form_frames"] / self.fps
         total_seconds = total_recorded_frames / self.fps
     
         print("\n--- Straight Leg Raises (Rehab) Exercise Report ---")
         print(f"Total Recorded Time: {total_seconds:.2f} seconds")
-        print(f"Good Form Duration: {good_form_seconds:.2f} seconds ({(good_form_seconds / total_seconds) * 100:.1f}%)")
+        print(f"Good Form Duration: {good_form_seconds:.2f} seconds ({(good_form_seconds / max(total_seconds, 0.001)) * 100:.1f}%)")
         print(f"Repetitions Completed: {self.reps}")
         print("Errors Detected:")
         if self.report["error_counts"]:
@@ -240,6 +258,7 @@ class SLRExerciseAnalyzer:
         else:
             print("  - No errors detected!")
         print("--------------------------------\n")
+        return f"Leg raises session completed. Total reps: {self.reps}"
 
     def run(self):
         """Run the analyzer with webcam input."""

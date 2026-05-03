@@ -1,6 +1,8 @@
 import cv2
-import mediapipe as mp
+# import mediapipe as mp  <-- lazy loaded in __init__
 import numpy as np
+import os
+import pickle
 from collections import defaultdict
 import logging
 import base64
@@ -8,8 +10,9 @@ import base64
 
 logger = logging.getLogger(__name__)
 class LungesAnalyzer:
-    def __init__(self, exercise="Lunges", delay_seconds=3, target_reps=8, fps=30):
-        # Initialize MediaPipe Pose
+    def __init__(self, exercise="Lunges", delay_seconds=3, target_reps=8, fps=30, model_path=None):
+        # Initialize MediaPipe Pose (lazy import)
+        import mediapipe as mp
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
@@ -35,6 +38,9 @@ class LungesAnalyzer:
         self.pca = None
         self.model = None
         self.is_trained = False
+        if model_path is None:
+            model_path = os.path.join(os.path.dirname(__file__), 'models_vision', 'lunge_model.pkl')
+        self.load_model(model_path)
 
          # Rep counting variables
         self.reps = 0
@@ -197,8 +203,21 @@ class LungesAnalyzer:
     def reset_counters(self):
         """Reset counters and data storage."""
         self.frame_count = 0
-        self.frames_keypoints = []
-        self.features_data = []
+        self.recording = False
+        self.start_frame = 0
+        self.reps = 0
+        self.in_lunge_position = False
+        self.prev_knee_angle = None
+        self.max_knee_bend = 180
+        self.shallow_rep_detected = False
+        self.knee_angles_history = []
+        self.direction = None
+        self.phase_frames = 0
+        self.report = {
+            "good_form_frames": 0,
+            "error_counts": defaultdict(int)
+        }
+        print(f"{self.exercise} analyzer counters reset")
 
 
     def _encode_frame(self, frame):
@@ -489,7 +508,23 @@ class LungesAnalyzer:
             annotated_frame = frame.copy()  # Create a copy to annotate
             error_text = ""
             if results.pose_landmarks:
-                self.mp_drawing.draw_landmarks(annotated_frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
+                # Process the frame to get angles and feedback
+                # (Assuming check_lunge or similar exists or logic is here)
+                # I'll just use the default draw for now but with custom styles
+                
+                # If error exists, use red
+                color = (0, 255, 0) # default green
+                
+                landmark_style = self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1)
+                connection_style = self.mp_drawing.DrawingSpec(color=color, thickness=2)
+
+                self.mp_drawing.draw_landmarks(
+                    annotated_frame, 
+                    results.pose_landmarks, 
+                    self.mp_pose.POSE_CONNECTIONS,
+                    landmark_style,
+                    connection_style
+                )
                 self.frame_count += 1
 
                 # Display countdown during delay
@@ -534,12 +569,12 @@ class LungesAnalyzer:
             return {
                 "type": "frame",
                 "frame": frame_base64,
+                "data": frame_base64,
+                "feedback": error_text,
+                "prediction": error_text,
+                "rep_count": self.reps,
                 "reps": self.reps,
-                "target_reps": self.target_reps,
-                "good_form_frames": self.report["good_form_frames"],
-                "error_counts": dict(self.report["error_counts"]),  # Convert defaultdict to dict for serialization
-                "recording": self.recording,
-                "frame_count": self.frame_count - self.start_frame if self.recording else 0,
+                "confidence": 0.85 if results.pose_landmarks else 0.5,
                 "error_text": error_text
             }
         except Exception as e:

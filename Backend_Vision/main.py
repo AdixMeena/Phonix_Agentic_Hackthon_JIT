@@ -6,17 +6,42 @@ import threading
 import time
 import websockets
 from functools import partial
-from squats import SquatAnalyzer  # Import SquatAnalyzer
-from WarriorPose import WarriorPoseAnalyzer
-from lunges_vision import LungesAnalyzer
-from legRaises import SLRExerciseAnalyzer 
-from bark_tts import play_speech_directly
-from asyncio import Queue, create_task
-
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load GeneralAnalyzer FIRST to initialize mediapipe DLL cleanly
+from general_analyzer import GeneralAnalyzer
+from bark_tts import play_speech_directly
+from asyncio import Queue, create_task
+
+# Try-except imports to handle TensorFlow/Dependency issues gracefully
+try:
+    from squats import SquatAnalyzer
+except Exception as e:
+    if 'logger' in globals():
+        logger.error(f"Failed to load SquatAnalyzer: {e}")
+    SquatAnalyzer = None
+
+try:
+    from WarriorPose import WarriorPoseAnalyzer
+except Exception as e:
+    logger.error(f"Failed to load WarriorPoseAnalyzer: {e}")
+    WarriorPoseAnalyzer = None
+
+try:
+    from lunges_vision import LungesAnalyzer
+except Exception as e:
+    logger.error(f"Failed to load LungesAnalyzer: {e}")
+    LungesAnalyzer = None
+
+try:
+    from legRaises import SLRExerciseAnalyzer 
+except Exception as e:
+    logger.error(f"Failed to load SLRExerciseAnalyzer: {e}")
+    SLRExerciseAnalyzer = None
+
+
 
 class VideoServer:
     def __init__(self):
@@ -33,14 +58,43 @@ class VideoServer:
 
         self.language=""
         self.audiobot = ""
+        self.last_ws_frame_time = 0
 
-        # Initialize analyzers with SquatAnalyzer
-        self.analyzers = {
-            "Squats": SquatAnalyzer(),  
-            "Warrior": WarriorPoseAnalyzer(),  
-            "Lunges": LungesAnalyzer(),
-            "LegRaises": SLRExerciseAnalyzer()
-        }
+        # Initialize analyzers safely - GeneralAnalyzer MUST be initialized LAST
+        # because it eagerly inits mediapipe at module level, and we need
+        # the other analyzers' lazy imports to run first to get the right DLL context.
+        self.analyzers = {}
+        if SquatAnalyzer:
+            try:
+                self.analyzers["Squats"] = SquatAnalyzer()
+                self.analyzers["squats"] = self.analyzers["Squats"]
+                logger.info("SquatAnalyzer loaded")
+            except Exception as e:
+                logger.error(f"SquatAnalyzer instantiation failed: {e}")
+        if WarriorPoseAnalyzer:
+            try:
+                self.analyzers["Warrior"] = WarriorPoseAnalyzer()
+                self.analyzers["warrior_pose"] = self.analyzers["Warrior"]
+                logger.info("WarriorPoseAnalyzer loaded")
+            except Exception as e:
+                logger.error(f"WarriorPoseAnalyzer instantiation failed: {e}")
+        if LungesAnalyzer:
+            try:
+                self.analyzers["Lunges"] = LungesAnalyzer()
+                self.analyzers["lunges"] = self.analyzers["Lunges"]
+                logger.info("LungesAnalyzer loaded")
+            except Exception as e:
+                logger.error(f"LungesAnalyzer instantiation failed: {e}")
+        if SLRExerciseAnalyzer:
+            try:
+                self.analyzers["LegRaises"] = SLRExerciseAnalyzer()
+                self.analyzers["leg_raises"] = self.analyzers["LegRaises"]
+                logger.info("SLRExerciseAnalyzer loaded")
+            except Exception as e:
+                logger.error(f"SLRExerciseAnalyzer instantiation failed: {e}")
+        # GeneralAnalyzer initialized last
+        self.analyzers["general"] = GeneralAnalyzer()
+        logger.info(f"Loaded analyzers: {list(self.analyzers.keys())}")
 
     async def process_frames(self, input_source=0):
         """Centralized frame processing loop with TTS error reporting."""
@@ -71,6 +125,11 @@ class VideoServer:
                     break
 
                 if self.current_analyzer:
+                    # Skip local camera capture if we recently received a frame from the browser
+                    if time.time() - self.last_ws_frame_time < 2.0:
+                        await asyncio.sleep(0.1)
+                        continue
+
                     try:
                         processed_data = await self.current_analyzer.process_video(frame)
 
@@ -246,7 +305,8 @@ class VideoServer:
         dead_clients = set()
         message_json = json.dumps(message)
         
-        for client in self.clients:
+        # Iterate over a copy to avoid 'set changed size during iteration' error
+        for client in list(self.clients):
             try:
                 await client.send(message_json)
             except websockets.exceptions.ConnectionClosed:
@@ -288,11 +348,19 @@ class VideoServer:
 
                     if action == 'connect':
                         await websocket.send(json.dumps({"status": "connected"}))
-                    elif action == 'start':
-                        if exercise in self.analyzers:
-                            await self.start_exercise(exercise, websocket)
+                    elif action == 'language':
+                        if data.get('language'):
+                            self.set_language(data.get('language'))
+                            await websocket.send(json.dumps({"status": "language_updated", "language": data.get('language')}))
                         else:
-                            await websocket.send(json.dumps({"error": f"Invalid exercise: {exercise}"}))
+                            await websocket.send(json.dumps({"error": "Missing language"}))
+                    elif action == 'start':
+                        # Use specified analyzer or fallback to general
+                        selected_exercise = exercise if exercise in self.analyzers else "general"
+                        await self.start_exercise(selected_exercise, websocket)
+                    elif 'frame' in data:
+                        # Process frame sent from frontend
+                        await self.process_websocket_frame(data['frame'], websocket)
                     elif action == 'stop':
                         await self.stop_exercise(websocket)
                     elif action == 'disconnect':
@@ -314,8 +382,59 @@ class VideoServer:
         except Exception as e:
             logger.error(f"Unexpected error in websocket handler: {e}")
         finally:
-            self.clients.remove(websocket)
+            self.clients.discard(websocket)  # Use discard to avoid KeyError
             logger.info(f"Client removed: {client_info}")
+
+    async def process_websocket_frame(self, frame_base64, websocket):
+        """Decode and process a frame sent via WebSocket."""
+        if not self.current_analyzer:
+            return
+        
+        self.last_ws_frame_time = time.time()
+        
+        try:
+            import base64
+            import numpy as np
+            # Decode base64
+            img_data = base64.b64decode(frame_base64)
+            nparr = np.frombuffer(img_data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            if frame is not None:
+                # Use the current analyzer to process the frame
+                processed_data = await self.current_analyzer.process_video(frame)
+                if processed_data:
+                    # Send back to the specific client
+                    await websocket.send(json.dumps(processed_data))
+                    
+                    # Also handle TTS logic for these frames
+                    error_text = processed_data.get("error_text", "")
+                    if error_text and self.audiobot != "off":
+                        current_time = time.time()
+                        if error_text != getattr(self, 'last_error_text', None):
+                            self.last_error_text = error_text
+                            self.error_hold_start_time = current_time
+                        
+                        time_held = current_time - getattr(self, 'error_hold_start_time', 0)
+                        if time_held >= getattr(self, 'error_tts_cooldown', 0):
+                            await self.tts_queue.put(error_text)
+                            self.last_tts_time = current_time
+            else:
+                await websocket.send(json.dumps({
+                    "feedback": "Received invalid frame",
+                    "error_text": "Could not decode camera frame",
+                    "confidence": 0,
+                }))
+        except Exception as e:
+            logger.error(f"Error processing websocket frame: {e}")
+            try:
+                await websocket.send(json.dumps({
+                    "feedback": "Vision server error",
+                    "error_text": str(e),
+                    "confidence": 0,
+                }))
+            except Exception:
+                pass
 
     async def start_exercise(self, exercise, websocket):
         """Start processing frames for the specified exercise."""
@@ -324,8 +443,32 @@ class VideoServer:
             return
 
         try:
-            self.current_analyzer = self.analyzers[exercise]
+            # Map exercise names to analyzers
+            analyzer_key = exercise
+            if exercise not in self.analyzers:
+                analyzer_key = "general"
+            
+            self.current_analyzer = self.analyzers[analyzer_key]
             self.current_analyzer.reset_counters()  # Reset counters for new exercise
+            
+            # Configure analyzer for specific exercise if it's the general analyzer
+            if analyzer_key == "general" and hasattr(self.current_analyzer, 'set_exercise_config'):
+                # Exercise-specific angle targets (would ideally come from database)
+                exercise_configs = {
+                    'Knee flexion stretch': {'min': 90, 'max': 120},
+                    'Straight leg raise': {'min': 40, 'max': 50},
+                    'Terminal knee extension': {'min': 0, 'max': 15},
+                    'Shoulder pendulum': {'min': 0, 'max': 360},  # Free range
+                    'Shoulder blade squeeze': {'min': 20, 'max': 40},
+                    'Pelvic tilt': {'min': 0, 'max': 15},
+                    'Cat-camel stretch': {'min': 10, 'max': 40},
+                    'Wrist flexion and extension': {'min': 60, 'max': 70},
+                    'Grip strengthening': {'min': 0, 'max': 100},
+                }
+                
+                config = exercise_configs.get(exercise, {'min': 0, 'max': 180})
+                self.current_analyzer.set_exercise_config(exercise, config['min'], config['max'])
+            
             self.running = True
             
             # Cancel any existing task
@@ -361,36 +504,9 @@ class VideoServer:
                 
         logger.info("Exercise stopped")
 
-    def start_server(self, host='localhost', port=8765):
-        """Start the WebSocket server."""
-        def run_event_loop(loop):
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_forever()
-            except Exception as e:
-                logger.error(f"Error in event loop: {e}")
-            finally:
-                # Clean up pending tasks
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                # Close the loop
-                loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.close()
-
-        self.event_loop = asyncio.new_event_loop()
-        server_thread = threading.Thread(
-            target=run_event_loop,
-            args=(self.event_loop,),
-            daemon=True
-        )
-        server_thread.start()
-
-        asyncio.run_coroutine_threadsafe(self._start_websocket_server(host, port), self.event_loop)
-        logger.info(f"WebSocket server started on ws://{host}:{port}")
-
-    async def _start_websocket_server(self, host, port):
-        """Start the WebSocket server asynchronously."""
+    async def run_server_async(self, host='0.0.0.0', port=8766):
+        """Start the WebSocket server asynchronously and keep it running."""
+        print(f"Attempting to start WebSocket server on ws://{host}:{port}...")
         try:
             self.server = await websockets.serve(
                 self.websocket_handler,
@@ -399,32 +515,36 @@ class VideoServer:
                 ping_interval=30,
                 ping_timeout=10
             )
-            logger.info(f"WebSocket server running at ws://{host}:{port}")
+            print(f"WebSocket server SUCCESS: Started on ws://{host}:{port}")
+            logger.info(f"WebSocket server started on ws://{host}:{port}")
+            print("Server is now running... Press Ctrl+C to stop")
+            try:
+                # Keep the server running
+                await asyncio.Future()  # run forever
+            except KeyboardInterrupt:
+                print("Server stopped by user")
+            except Exception as e:
+                print(f"Server error: {e}")
+                logger.error(f"Server error: {e}")
         except Exception as e:
             logger.error(f"Failed to start WebSocket server: {e}")
-            # Try to shut down gracefully
-            if hasattr(self, 'event_loop') and self.event_loop:
-                self.event_loop.call_soon_threadsafe(self.event_loop.stop)
+        finally:
+            if self.server:
+                self.server.close()
+                await self.server.wait_closed()
 
-    def stop_server(self):
-        """Stop the WebSocket server."""
-        self.running = False
-        
-        if self.server:
-            self.server.close()
-            if self.event_loop:
-                asyncio.run_coroutine_threadsafe(self.server.wait_closed(), self.event_loop)
-            
-        if self.event_loop:
-            self.event_loop.call_soon_threadsafe(self.event_loop.stop)
-            
-        logger.info("WebSocket server stopped")
+    def start_server(self, host='0.0.0.0', port=8766):
+        """Main entry point to start the server."""
+        print(f"Starting server on {host}:{port}")
+        try:
+            asyncio.run(self.run_server_async(host, port))
+        except KeyboardInterrupt:
+            print("Server stopped by user")
+            logger.info("Server stopped by user")
+        except Exception as e:
+            print(f"Server error: {e}")
+            logger.error(f"Server error: {e}")
 
 if __name__ == "__main__":
     server = VideoServer()
-    server.start_server()
-    try:
-        while True:
-            time.sleep(1)  # Keep main thread alive
-    except KeyboardInterrupt:
-        server.stop_server()
+    server.start_server(host='localhost', port=8765)

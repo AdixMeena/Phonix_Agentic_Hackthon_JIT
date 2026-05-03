@@ -136,71 +136,79 @@ export default function PatientDashboard() {
             </p>
           </div>
 
-          {/* Stat cards */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 40, flexWrap: 'wrap' }}>
-            <StatCard label="Exercises today" value={patientExercises.length} sub={`${pending.length} pending`} />
-            <StatCard label="Your score" value={patient?.score ?? 0} sub={(patient?.score ?? 0) >= 75 ? '↑ Great progress' : 'Keep going'} />
-            <StatCard label="Streak" value={`${patient?.streak ?? 0}d`} sub="Days active 🔥" />
-          </div>
-
-          {error && (
-            <div style={{
-              background: '#ff3b3010', border: '1px solid #ff3b3030',
-              borderRadius: 12, padding: '12px 16px',
-              fontSize: 13, color: '#ff3b30', lineHeight: 1.5,
-              marginBottom: 24,
-            }}>
-              {error}
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#6e6e73', fontSize: 14, padding: '40px 0' }}>
+              Loading your recovery plan...
             </div>
+          ) : (
+            <>
+              {/* Stat cards */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 40, flexWrap: 'wrap' }}>
+                <StatCard label="Exercises today" value={patientExercises.length} sub={`${pending.length} pending`} />
+                <StatCard label="Your score" value={patient?.score ?? 0} sub={(patient?.score ?? 0) >= 75 ? '↑ Great progress' : 'Keep going'} />
+                <StatCard label="Streak" value={`${patient?.streak ?? 0}d`} sub="Days active 🔥" />
+              </div>
+
+              {error && (
+                <div style={{
+                  background: '#ff3b3010', border: '1px solid #ff3b3030',
+                  borderRadius: 12, padding: '12px 16px',
+                  fontSize: 13, color: '#ff3b30', lineHeight: 1.5,
+                  marginBottom: 24,
+                }}>
+                  {error}
+                </div>
+              )}
+
+              {/* Today's exercises */}
+              <section style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h2 style={{ fontSize: 19, fontWeight: 600, color: '#1d1d1f', margin: 0 }}>Today's exercises</h2>
+                  <span style={{ fontSize: 14, color: '#6e6e73' }}>{patientExercises.length} assigned</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {patientExercises.length === 0 ? (
+                    <Card style={{ textAlign: 'center', padding: '40px 20px', color: '#6e6e73' }}>
+                      No exercises assigned for today.
+                    </Card>
+                  ) : (
+                    patientExercises.map(ex => (
+                      <Card
+                        key={ex.id}
+                        onClick={() => navigate(`/patient/exercise/${ex.id}`)}
+                        style={{ position: 'relative', borderLeft: '3px solid #0071e3' }}
+                      >
+                        <div style={{ position: 'absolute', top: 20, right: 20 }}>
+                          <StatusBadge status={ex.status} />
+                        </div>
+
+                        <div style={{ paddingRight: 120 }}>
+                          <div style={{ fontSize: 19, fontWeight: 600, color: '#1d1d1f', marginBottom: 4 }}>{ex.name}</div>
+                          <div style={{ fontSize: 14, color: '#6e6e73', marginBottom: 8 }}>{ex.duration}</div>
+                          <div style={{
+                            fontSize: 14, color: '#6e6e73',
+                            display: '-webkit-box', WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                            lineHeight: 1.4,
+                          }}>
+                            {ex.instructions}
+                          </div>
+                        </div>
+
+                        <div style={{
+                          marginTop: 16, paddingTop: 12, borderTop: '1px solid #d2d2d7',
+                          fontSize: 12, color: '#0071e3', fontWeight: 600,
+                        }}>
+                          Tap to start →
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
           )}
-
-          {loading && (
-            <div style={{ textAlign: 'center', color: '#6e6e73', fontSize: 14 }}>
-              Loading your plan...
-            </div>
-          )}
-
-          {/* Today's exercises */}
-          <section style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ fontSize: 19, fontWeight: 600, color: '#1d1d1f', margin: 0 }}>Today's exercises</h2>
-              <span style={{ fontSize: 14, color: '#6e6e73' }}>{patientExercises.length} assigned</span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {patientExercises.map(ex => (
-                <Card
-                  key={ex.id}
-                  onClick={() => navigate(`/patient/exercise/${ex.id}`)}
-                  style={{ position: 'relative', borderLeft: '3px solid #0071e3' }}
-                >
-                  <div style={{ position: 'absolute', top: 20, right: 20 }}>
-                    <StatusBadge status={ex.status} />
-                  </div>
-
-                  <div style={{ paddingRight: 120 }}>
-                    <div style={{ fontSize: 19, fontWeight: 600, color: '#1d1d1f', marginBottom: 4 }}>{ex.name}</div>
-                    <div style={{ fontSize: 14, color: '#6e6e73', marginBottom: 8 }}>{ex.duration}</div>
-                    <div style={{
-                      fontSize: 14, color: '#6e6e73',
-                      display: '-webkit-box', WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      lineHeight: 1.4,
-                    }}>
-                      {ex.instructions}
-                    </div>
-                  </div>
-
-                  <div style={{
-                    marginTop: 16, paddingTop: 12, borderTop: '1px solid #d2d2d7',
-                    fontSize: 12, color: '#0071e3', fontWeight: 600,
-                  }}>
-                    Tap to start →
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </section>
 
           {/* Doctor's feedback */}
           {feedbacks.length > 0 && (

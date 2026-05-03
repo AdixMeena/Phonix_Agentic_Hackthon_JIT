@@ -1,5 +1,5 @@
 import cv2
-import mediapipe as mp
+# import mediapipe as mp  <-- lazy loaded in __init__
 import numpy as np
 from collections import defaultdict
 import time
@@ -8,7 +8,8 @@ import base64
 
 class WarriorPoseAnalyzer:
     def __init__(self, record_seconds=10, fps=30):
-        # Initialize MediaPipe Pose
+        # Initialize MediaPipe Pose (lazy import)
+        import mediapipe as mp
         self.mp_pose = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
         self.pose = self.mp_pose.Pose()
@@ -28,6 +29,7 @@ class WarriorPoseAnalyzer:
         self.delay_frames = 3 * fps  # 3 seconds delay
         self.record_frames = record_seconds * fps  # Number of frames to record
         self.frame_count = 0
+        self.start_frame = 0
         self.recording = False
         self.report = {
             "good_form_frames": 0,
@@ -119,6 +121,7 @@ class WarriorPoseAnalyzer:
     def reset_counters(self):
         """Reset frame counts and report metrics for a new session."""
         self.frame_count = 0
+        self.start_frame = 0
         self.recording = False
         self.report = {
             "good_form_frames": 0,
@@ -155,8 +158,20 @@ class WarriorPoseAnalyzer:
         annotated_frame = frame.copy()  # Create a copy to annotate
         error_text = ""
         if results.pose_landmarks:
-            self.mp_drawing.draw_landmarks(annotated_frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
             errors = self.check_warrior_pose(results.pose_landmarks.landmark)
+            
+            # Draw skeleton with dynamic color
+            color = (0, 255, 0) if not errors else (0, 0, 255)
+            landmark_style = self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1)
+            connection_style = self.mp_drawing.DrawingSpec(color=color, thickness=2)
+            
+            self.mp_drawing.draw_landmarks(
+                annotated_frame, 
+                results.pose_landmarks, 
+                self.mp_pose.POSE_CONNECTIONS,
+                landmark_style,
+                connection_style
+            )
 
             # Update frame count and recording logic
             self.frame_count += 1
@@ -197,12 +212,17 @@ class WarriorPoseAnalyzer:
         frame_base64 = self._encode_frame(annotated_frame)
         return {
             "type": "frame",
+            "frame": frame_base64,
             "data": frame_base64,
+            "feedback": error_text,
+            "reps": 0,
+            "rep_count": 0,
+            "confidence": 0.85 if results.pose_landmarks else 0.5,
             "good_form_frames": self.report["good_form_frames"],
-            "error_counts": self.report["error_counts"],
+            "error_counts": dict(self.report["error_counts"]),
             "recording": self.recording,
             "frame_count": self.frame_count - self.start_frame if self.recording else 0,
-            "error_text": error_text                ## ADDED FOR TTS
+            "error_text": error_text
         }
 
     def _encode_frame(self, frame):

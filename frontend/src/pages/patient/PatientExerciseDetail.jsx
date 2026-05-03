@@ -164,11 +164,14 @@ export default function PatientExerciseDetail() {
           }}>
             <div>
               <div style={{ fontSize: 14, color: '#6e6e73' }}>Target angle</div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: '#1d1d1f', marginTop: 4 }}>{exercise.targetAngle}</div>
+              <div style={{ fontSize: 24, fontWeight: 600, color: '#1d1d1f', marginTop: 4 }}>{exercise.target_angle}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 14, color: '#6e6e73' }}>AI monitoring</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#34c759', marginTop: 4 }}>Active</div>
+              <div style={{ fontSize: 14, fontWeight: 600,
+                color: '#34c759', marginTop: 4 }}>
+                Active
+              </div>
             </div>
           </section>
         </div>
@@ -183,9 +186,11 @@ export default function PatientExerciseDetail() {
           <BtnPrimary
             fullWidth
             style={{ height: 56, fontSize: 17, fontWeight: 600 }}
-            onClick={() => navigate(`/patient/session/${id}`)}
+            onClick={() => navigate(`/patient/session/${id}`, {
+              state: { vision_model: exercise.vision_model, exercise_name: exercise.name }
+            })}
           >
-            Start exercise
+            {exercise.vision_model ? '🎥 Start Camera Session' : 'Start Exercise'}
           </BtnPrimary>
         </div>
 

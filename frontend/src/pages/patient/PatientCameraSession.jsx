@@ -1,36 +1,17 @@
 // PatientCameraSession.jsx
 import React, { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import PatientApprovalGate from '../../components/PatientApprovalGate.jsx'
 import { supabase } from '../../lib/supabase.js'
-
-const POSE_CONNECTIONS = [
-  [11, 13], [13, 15], [12, 14], [14, 16],
-  [11, 12], [11, 23], [12, 24],
-  [23, 24], [23, 25], [25, 27], [24, 26], [26, 28],
-  [27, 29], [28, 30], [29, 31], [30, 32],
-]
-
-// ── Voice helper ───────────────────────────
-// lang: 'en-US' for English, 'ur-PK' for Urdu
-function speak(text, { rate = 0.95, pitch = 1.0, volume = 1.0, lang = 'en-US' } = {}) {
-  if (!window.speechSynthesis || !text) return
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.rate = rate
-  utterance.pitch = pitch
-  utterance.volume = volume
-  utterance.lang = lang
-  window.speechSynthesis.speak(utterance)
-}
 
 export default function PatientCameraSession() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [exerciseName, setExerciseName] = useState('Exercise')
+  const [visionModel, setVisionModel] = useState(location.state?.vision_model || 'general')
   const [feedback, setFeedback] = useState('Initializing...')
-  const [landmarks, setLandmarks] = useState([])
   const [reps, setReps] = useState(0)
   const [score, setScore] = useState(0)
   const [timer, setTimer] = useState(0)
@@ -39,21 +20,21 @@ export default function PatientCameraSession() {
 
   // ── NEW: language toggle state — 'en' = English, 'ur' = Urdu ─────────────
   const [voiceLang, setVoiceLang] = useState('en')
+  const [wsStatus, setWsStatus] = useState('connecting')
+  const [backendFrameReady, setBackendFrameReady] = useState(false)
 
 
   const videoRef = useRef(null)
-  const overlayRef = useRef(null)
+  const displayCanvasRef = useRef(null)
   const captureRef = useRef(null)
   const wsRef = useRef(null)
   const sendTimerRef = useRef(null)
   const sessionIdRef = useRef(`${Date.now()}`)
   const jointScoresRef = useRef({})
-  const scoreRef = useRef(0)
+  const scoreRef = useRef(100) // Default to 100
   const repsRef = useRef(0)
   const timerRef = useRef(0)
-  const lastFeedbackRef = useRef('')
-  const feedbackTimerRef = useRef(null)
-  const voiceIntroSaid = useRef(false)
+  const formTallyRef = useRef({ good: 0, total: 0 })
 
   // Keep voiceLang accessible inside WS callback without re-registering the effect
   const voiceLangRef = useRef(voiceLang)
@@ -64,20 +45,28 @@ export default function PatientCameraSession() {
   useEffect(() => { repsRef.current = reps }, [reps])
   useEffect(() => { timerRef.current = timer }, [timer])
 
-  // Load exercise name
+  // Load exercise metadata (fallback if route state is missing)
   useEffect(() => {
     let isMounted = true
     async function loadExercise() {
       const { data } = await supabase
         .from('exercises')
-        .select('name')
+        .select('name, vision_model')
         .eq('id', Number(id))
         .maybeSingle()
-      if (isMounted && data?.name) setExerciseName(data.name)
+      if (!isMounted || !data) return
+      if (location.state?.exercise_name) {
+        setExerciseName(location.state.exercise_name)
+      } else if (data.name) {
+        setExerciseName(data.name)
+      }
+      if (!location.state?.vision_model) {
+        setVisionModel(data.vision_model || 'general')
+      }
     }
     loadExercise()
     return () => { isMounted = false }
-  }, [id])
+  }, [id, location.state])
 
   // Session timer
   useEffect(() => {
@@ -103,98 +92,121 @@ export default function PatientCameraSession() {
     initCamera()
     return () => {
       isMounted = false
-      window.speechSynthesis?.cancel()
       const stream = videoRef.current?.srcObject
       if (stream?.getTracks) stream.getTracks().forEach(t => t.stop())
     }
   }, [])
 
-  // ── WebSocket ─────────────────────────────────────────────────────────────
-  // Expects the backend to send:
-  //   { landmarks, session_score, rep_counted, joint_scores, feedback, voice_intro }
-  //
-  // For bilingual support the backend should also send:
-  //   { feedback_ur: "اردو میں فیڈبیک", voice_intro_ur: "اردو میں تعارف" }
-  // If those keys are absent, English text is used as fallback for Urdu mode too.
+  // Vision backend websocket
   useEffect(() => {
-    const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
-    const ws = new WebSocket(`${wsBase}/ws/session/${sessionIdRef.current}?exercise_id=${id}`)
+    if (!visionModel || exerciseName === 'Exercise') return
+
+    const wsUrl = import.meta.env.VITE_VISION_WS_URL || 'ws://localhost:8765'
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
-    ws.onmessage = (event) => {
+    ws.onopen = () => {
+      setWsStatus('open')
+      ws.send(JSON.stringify({
+        action: 'start',
+        exercise: exerciseName,
+        language: voiceLangRef.current === 'ur' ? 'ur' : 'en',
+        audiobot: 'on',
+      }))
+      setFeedback('Position yourself in front of the camera')
+    }
+
+    ws.onmessage = event => {
       try {
         const data = JSON.parse(event.data)
-        const lang = voiceLangRef.current               // 'en' or 'ur'
-        const bcp = lang === 'ur' ? 'ur-PK' : 'en-US' // BCP-47 for speechSynthesis
 
-        if (Array.isArray(data.landmarks)) setLandmarks(data.landmarks)
-        if (typeof data.session_score === 'number') setScore(data.session_score)
+        const frameBase64 = data.frame || data.data
+        if (frameBase64) {
+          setBackendFrameReady(true)
+          const img = new Image()
+          img.onload = () => {
+            const canvas = displayCanvasRef.current
+            if (!canvas) return
+            const ctx = canvas.getContext('2d')
+            canvas.width = img.width
+            canvas.height = img.height
+            ctx.drawImage(img, 0, 0)
+          }
+          img.src = `data:image/jpeg;base64,${frameBase64}`
+        }
 
-        if (data.rep_counted) {
-          setReps(r => r + 1)
-          // Rep encouragement — pick language variant when available
-          const repMsg = lang === 'ur'
-            ? (data.rep_msg_ur || 'اچھی کوشش')   // fallback Urdu "Good try"
-            : (data.rep_msg_en || 'Good rep')
-          speak(repMsg, { rate: 1.1, lang: bcp })
-          return
+        const backendReps = typeof data.rep_count === 'number' ? data.rep_count : data.reps
+        if (typeof backendReps === 'number') {
+          setReps(backendReps)
+          repsRef.current = backendReps
+        }
+
+        // Calculate accurate form score based on feedback tally rather than instant ML confidence
+        const feedbackMsg = data.feedback || data.error_text || data.prediction
+        if (feedbackMsg && feedbackMsg !== "Initializing..." && feedbackMsg !== "Collecting data...") {
+          formTallyRef.current.total += 1
+          
+          const isGood = feedbackMsg.toLowerCase().includes("good") || 
+                         feedbackMsg.toLowerCase().includes("doing well") || 
+                         feedbackMsg.toLowerCase().includes("great form") || 
+                         feedbackMsg.toLowerCase().includes("correct") ||
+                         feedbackMsg.toLowerCase() === "perfect"
+
+          if (isGood) {
+            formTallyRef.current.good += 1
+          }
+
+          // Start updating score after collecting a few frames
+          if (formTallyRef.current.total > 5) {
+            const calculatedScore = Math.round((formTallyRef.current.good / formTallyRef.current.total) * 100)
+            setScore(calculatedScore)
+            scoreRef.current = calculatedScore
+          }
+        }
+
+        if (data.feedback || data.error_text) {
+          setFeedback(data.feedback || data.error_text)
         }
 
         if (data.joint_scores && typeof data.joint_scores === 'object') {
           jointScoresRef.current = data.joint_scores
         }
 
-        // ── Voice intro — spoken exactly once when pose first detected ──────
-        if (!voiceIntroSaid.current) {
-          const introText = lang === 'ur'
-            ? (data.voice_intro_ur || data.voice_intro)  // fallback to EN text
-            : data.voice_intro
-
-          if (introText) {
-            voiceIntroSaid.current = true
-            speak(introText, { rate: 0.9, lang: bcp })
-            setFeedback(data.feedback || 'Get ready')
-            return
-          }
-        }
-
-        // ── Live feedback — spoken at most every 4 seconds, only if changed ─
-        if (data.feedback) {
-          const feedbackText = lang === 'ur'
-            ? (data.feedback_ur || data.feedback)         // fallback to EN text
-            : data.feedback
-
-          setFeedback(feedbackText)
-
-          const isNew = feedbackText !== lastFeedbackRef.current
-          const noTimer = !feedbackTimerRef.current
-
-          if (isNew && noTimer) {
-            lastFeedbackRef.current = feedbackText
-            speak(feedbackText, { rate: 0.95, lang: bcp })
-            // Cooldown: don't speak again for 4 seconds
-            feedbackTimerRef.current = setTimeout(() => {
-              feedbackTimerRef.current = null
-            }, 4000)
-          }
+        const audioB64 = data.audio || data.audio_data
+        if (audioB64) {
+          const audioBlob = new Blob(
+            [Uint8Array.from(atob(audioB64), c => c.charCodeAt(0))],
+            { type: 'audio/mpeg' },
+          )
+          const url = URL.createObjectURL(audioBlob)
+          const audio = new Audio(url)
+          audio.play().catch(() => {})
+          audio.onended = () => URL.revokeObjectURL(url)
         }
 
       } catch {
-        setFeedback('Tracking error')
+        // ignore parse errors
       }
     }
 
-    ws.onclose = () => setFeedback('Connection closed')
-    ws.onerror = () => setFeedback('WebSocket error')
-
-    return () => {
-      ws.close()
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    ws.onclose = () => {
+      setWsStatus('closed')
+      setBackendFrameReady(false)
+      setFeedback('Session ended')
     }
-  }, [id])
+    ws.onerror = () => {
+      setWsStatus('error')
+      setBackendFrameReady(false)
+      setFeedback('Could not connect to vision server')
+    }
+
+    return () => ws.close()
+  }, [visionModel, exerciseName])
 
   // Frame capture loop
   useEffect(() => {
+    if (!visionModel) return
+
     const capture = () => {
       const video = videoRef.current
       const canvas = captureRef.current
@@ -202,89 +214,50 @@ export default function PatientCameraSession() {
       if (!video || !canvas || !ws || ws.readyState !== WebSocket.OPEN) return
       if (video.videoWidth === 0 || video.videoHeight === 0) return
 
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+      const MAX_WIDTH = 640
+      let w = video.videoWidth
+      let h = video.videoHeight
+      if (w > MAX_WIDTH) {
+        h = Math.floor(h * (MAX_WIDTH / w))
+        w = MAX_WIDTH
+      }
+
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w
+        canvas.height = h
       }
 
       const ctx = canvas.getContext('2d')
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1]
+      ctx.drawImage(video, 0, 0, w, h)
+      const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]
       ws.send(JSON.stringify({ frame: base64 }))
     }
 
-    sendTimerRef.current = setInterval(capture, 250)
+    sendTimerRef.current = setInterval(capture, 150)
     return () => clearInterval(sendTimerRef.current)
-  }, [])
-
-  // Skeleton overlay
-  useEffect(() => {
-    const canvas = overlayRef.current
-    const video = videoRef.current
-    if (!canvas || !video) return
-
-    const ctx = canvas.getContext('2d')
-    const width = video.videoWidth || canvas.width
-    const height = video.videoHeight || canvas.height
-    canvas.width = width
-    canvas.height = height
-    ctx.clearRect(0, 0, width, height)
-
-    if (!landmarks.length) return
-
-    ctx.strokeStyle = '#0071e3'
-    ctx.lineWidth = 3
-    ctx.lineCap = 'round'
-    POSE_CONNECTIONS.forEach(([a, b]) => {
-      const p1 = landmarks[a]
-      const p2 = landmarks[b]
-      if (!p1 || !p2) return
-      ctx.beginPath()
-      ctx.moveTo(p1.x * width, p1.y * height)
-      ctx.lineTo(p2.x * width, p2.y * height)
-      ctx.stroke()
-    })
-
-    landmarks.forEach(point => {
-      ctx.beginPath()
-      ctx.fillStyle = '#34c759'
-      ctx.arc(point.x * width, point.y * height, 4, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 1
-      ctx.stroke()
-    })
-  }, [landmarks])
+  }, [visionModel])
 
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
-  // ── Language toggle handler ───────────────────────────────────────────────
-  // Switching language mid-session resets intro + feedback state so the new
-  // language kicks in cleanly on the very next WS frame.
   const handleLangToggle = () => {
-    window.speechSynthesis?.cancel()
-    if (feedbackTimerRef.current) {
-      clearTimeout(feedbackTimerRef.current)
-      feedbackTimerRef.current = null
+    const newLang = voiceLang === 'en' ? 'ur' : 'en'
+    setVoiceLang(newLang)
+    voiceLangRef.current = newLang
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: 'language',
+        language: newLang,
+      }))
     }
-    lastFeedbackRef.current = ''   // force next feedback to be spoken fresh
-    voiceIntroSaid.current = false // allow intro to re-fire in new language
-    setVoiceLang(prev => prev === 'en' ? 'ur' : 'en')
   }
 
   // ── Stop handler ──────────────────────────────────────────────────────────
   async function handleStop() {
-    if (wsRef.current) wsRef.current.close()
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'stop' }))
+      wsRef.current.close()
+    }
     clearInterval(sendTimerRef.current)
-    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
-    window.speechSynthesis?.cancel()
-
-    const lang = voiceLangRef.current
-    const bcp = lang === 'ur' ? 'ur-PK' : 'en-US'
-    const doneMsg = lang === 'ur'
-      ? 'سیشن مکمل ہو گیا۔ آپ کی کارکردگی کا تجزیہ ہو رہا ہے۔'
-      : 'Session complete. Analyzing your performance.'
-    speak(doneMsg, { lang: bcp })
 
     setAnalyzing(true)
 
@@ -376,6 +349,8 @@ export default function PatientCameraSession() {
     )
   }
 
+  // Always show vision session now
+
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <PatientApprovalGate showNav={false}>
@@ -386,19 +361,22 @@ export default function PatientCameraSession() {
       }}>
         <video
           ref={videoRef}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-          playsInline muted
+          style={{ 
+            position: 'absolute', inset: 0, 
+            width: '100%', height: '100%', 
+            objectFit: 'cover',
+            opacity: backendFrameReady ? 0 : 1,
+            zIndex: backendFrameReady ? -1 : 1,
+          }}
+          playsInline muted autoPlay
         />
         <canvas
-          ref={overlayRef}
+          ref={displayCanvasRef}
           style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
             objectFit: 'cover',
-            zIndex: 5,
-            pointerEvents: 'none'
+            display: backendFrameReady ? 'block' : 'none',
           }}
         />
         <canvas ref={captureRef} style={{ display: 'none' }} />

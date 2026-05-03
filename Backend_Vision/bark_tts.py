@@ -1,9 +1,22 @@
-import edge_tts
 import asyncio
 import os
 import tempfile
-from googletrans import Translator # 3.1.0a0
 import base64
+
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:
+    edge_tts = None
+    EDGE_TTS_AVAILABLE = False
+
+try:
+    from googletrans import Translator  # 3.1.0a0
+    TRANSLATOR_AVAILABLE = True
+except (ImportError, AttributeError) as e:
+    print(f"googletrans import failed: {e}")
+    Translator = None
+    TRANSLATOR_AVAILABLE = False
 
 async def play_speech_directly(text, lang='en'):
     """
@@ -17,6 +30,9 @@ async def play_speech_directly(text, lang='en'):
         dict: Contains 'audio_data' (base64-encoded MP3) and 'error' (if any)
     """
     try:
+        if not EDGE_TTS_AVAILABLE:
+            return {"audio_data": None, "error": "edge_tts is not installed. Text-to-speech is disabled."}
+
         # Translate if needed
         voice = "en-US-JennyNeural"
         if lang == 'ur':
@@ -53,7 +69,9 @@ async def play_speech_directly(text, lang='en'):
 
 def translate_to_urdu(text):
     """Translate English text to Urdu"""
-    # Initialize translator
+    if not TRANSLATOR_AVAILABLE:
+        return text
+
     translator = Translator()
     try:
         print("Translating Text")

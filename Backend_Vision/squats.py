@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
-import tensorflow as tf
+# import tensorflow as tf  <-- Moved inside __init__ to prevent startup crashes
 import threading
 import base64
 import os
@@ -19,9 +19,9 @@ import base64
 import time
 from typing import Dict, List
 import joblib
-from tensorflow.keras.models import load_model
+# from tensorflow.keras.models import load_model <-- Moved inside __init__
 import logging
-import mediapipe as mp
+# import mediapipe as mp  <-- Moved inside __init__
 import numpy as np
 import pandas as pd
 import asyncio
@@ -36,10 +36,13 @@ from functools import partial
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+BASE_DIR = os.path.dirname(__file__)
+MODEL_DIR = os.path.join(BASE_DIR, 'models_vision')
+
 
 class SquatAnalyzer:
 #    def __init__(self, model_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\best_squat_model.keras", scaler_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\preprocessed_data_label_encoder.joblib", label_encoder_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\preprocessed_data_scaler.joblib" , window_size=30):
-    def __init__(self, model_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\best_squat_model.keras", scaler_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\preprocessed_data_scaler.joblib", label_encoder_path = r"E:\IMPORTED FROM C\Desktop\Website_PhysioVision\PhysioVision\Backend_Vision\models_vision\preprocessed_data_label_encoder.joblib" , window_size=30):
+    def __init__(self, model_path=None, scaler_path=None, label_encoder_path=None, window_size=30):
 
         """Initialize the squat analyzer with trained model and preprocessing tools"""
         # Load model and preprocessing tools
@@ -50,20 +53,41 @@ class SquatAnalyzer:
         self.capture = None
         self.detector_thread = None
 
-        self.model = tf.keras.models.load_model(model_path)
-        self.scaler = joblib.load(scaler_path)
-        self.label_encoder = joblib.load(label_encoder_path)
+        model_path = model_path or os.path.join(MODEL_DIR, 'best_squat_model.keras')
+        scaler_path = scaler_path or os.path.join(MODEL_DIR, 'preprocessed_data_scaler.joblib')
+        label_encoder_path = label_encoder_path or os.path.join(MODEL_DIR, 'preprocessed_data_label_encoder.joblib')
+
+        try:
+            import tensorflow as tf
+            from tensorflow.keras.models import load_model
+            self.model = load_model(model_path)
+        except Exception as e:
+            logger.error(f"Could not load TensorFlow model: {e}")
+            self.model = None
+
+        try:
+            self.scaler = joblib.load(scaler_path)
+            self.label_encoder = joblib.load(label_encoder_path)
+        except Exception as e:
+            logger.error(f"Could not load scaler/encoder: {e}")
+            self.scaler = None
+            self.label_encoder = None
         self.window_size = window_size
         
-        # Initialize MediaPipe Pose
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-            model_complexity=1
-        )
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.mp_drawing_styles = mp.solutions.drawing_styles
+        # Initialize MediaPipe Pose (lazy import to prevent DLL state corruption)
+        try:
+            import mediapipe as mp
+            self.mp_pose = mp.solutions.pose
+            self.pose = self.mp_pose.Pose(
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+                model_complexity=1
+            )
+            self.mp_drawing = mp.solutions.drawing_utils
+            self.mp_drawing_styles = mp.solutions.drawing_styles
+        except Exception as e:
+            logger.error(f"MediaPipe init failed in SquatAnalyzer: {e}")
+            self.pose = None
         
         # Create buffer for storing features
         self.features_buffer = deque(maxlen=window_size)
@@ -267,13 +291,23 @@ class SquatAnalyzer:
         if not results.pose_landmarks:
             return None, frame
         
-        # Draw pose landmarks on the image
+        # Draw pose landmarks on the image with dynamic color
         annotated_image = frame.copy()
+        
+        # Determine color based on form
+        form_color = (0, 255, 0) if self.current_prediction == 'good' else (0, 0, 255)
+        if self.current_prediction is None:
+            form_color = (255, 255, 255) # White while initializing
+            
+        connection_style = self.mp_drawing.DrawingSpec(color=form_color, thickness=2)
+        landmark_style = self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1)
+
         self.mp_drawing.draw_landmarks(
             annotated_image,
             results.pose_landmarks,
             self.mp_pose.POSE_CONNECTIONS,
-            landmark_drawing_spec=self.mp_drawing_styles.get_default_pose_landmarks_style()
+            landmark_style,
+            connection_style
         )
         
         # Convert landmarks to keypoints dictionary
@@ -460,60 +494,7 @@ class SquatAnalyzer:
         
         return image
 
-    async def process_video(self, frame):
-        """Process a single frame and return data to broadcast."""
-        # Process the frame
-        if frame is None:
-            print("Warning: Received None frame")
-            return None
-
-        features, annotated_frame = self._process_frame(frame)
-
-        # If no pose detected
-        if features is None:
-            frame_base64 = self._encode_frame(frame)
-            return {
-                "type": "frame",
-                "data": frame_base64,
-                "prediction": None,
-                "confidence": None,
-                "rep_count": self.rep_count
-            }
-
-        # Make prediction if enough frames collected
-        if len(self.features_buffer) >= self.window_size:
-            print("line k oooper")
-            new_prediction, new_confidence = self._make_prediction()
-            print("line k neeche")
-            self.current_prediction, self.prediction_confidence = self._smooth_predictions(
-                new_prediction, new_confidence)
-            if self.current_prediction is not None:
-                self._update_error_counts(self.current_prediction)
-
-        # Update rep count with current features
-        self._update_rep_count(features)
-
-        ### TEXT TO SPEECH
-        error_text = self.current_prediction
-
-        # Add None check here
-        if error_text is None:
-            error_text = "Processing..."
-        elif error_text == "good":
-            error_text = "You are doing well" 
-        elif error_text in self.error_explanations:
-            error_text = self.error_explanations[error_text]
-            # Add safety check for the dictionary value
-            if error_text is None:
-                error_text = "Unknown error"
-        
-        # Encode frame as base64 and return data
-        # Draw feedback on the frame BEFORE encoding
-        if annotated_frame is not None:
-            annotated_frame = self.draw_feedback(annotated_frame, self.current_prediction, self.prediction_confidence)
-            frame_base64 = self._encode_frame(annotated_frame)
-
-        return None  # If no data to broadcast
+    # First process_video removed (it was a duplicate that always returned None)
     
     def generate_report(self):
         """Generate a report summarizing reps and error occurrences"""
@@ -543,6 +524,10 @@ class SquatAnalyzer:
         self.depth_history.clear()
         self.min_depth = None
         self.max_depth = None
+        self.features_buffer.clear()
+        self.current_prediction = None
+        self.prediction_confidence = 0.0
+        self.last_predictions.clear()
         for error in self.error_counts:
             self.error_counts[error] = 0
         print("Counters reset")
@@ -602,21 +587,26 @@ class SquatAnalyzer:
 
         ### TEXT TO SPEECH
         error_text = self.current_prediction
-        if error_text == "good":
+        if error_text is None:
+            error_text = "Collecting data..."
+        elif error_text == "good":
             error_text = "You are doing well"
         elif error_text in self.error_explanations:
-            error_text = self.error_explanations[error_text]
+            error_text = self.error_explanations[error_text] or "Unknown error"
 
-        
-        # Encode frame as base64 and return data
+        # Draw feedback on frame BEFORE encoding
         if annotated_frame is not None:
+            annotated_frame = self.draw_feedback(annotated_frame, self.current_prediction, self.prediction_confidence)
             frame_base64 = self._encode_frame(annotated_frame)
             return {
                 "type": "frame",
+                "frame": frame_base64,
                 "data": frame_base64,
+                "feedback": error_text,
                 "prediction": error_text,
-                "confidence": self.prediction_confidence,
+                "confidence": float(self.prediction_confidence) if self.prediction_confidence else 0.5,
                 "rep_count": self.rep_count,
+                "reps": self.rep_count,
                 "error_text": error_text
             }
 
